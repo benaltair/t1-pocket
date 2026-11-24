@@ -48,7 +48,11 @@ def apply_and_test(repo, profile, patches):
         KIT/"tests/clock.cpp", "-o", repo/"clock-test", cwd=repo)
     run(repo/"clock-test")
     if profile in ("pocket", "dual"):
-        run("c++","-std=c++11","-funsigned-char","-I",KIT/"tests","-I",repo/"src","-I",repo/"variants/heltec_t1",
+        import sys
+        sys.path.insert(0, str(KIT / "tests"))
+        from receive_fixture import write_callbacks
+        write_callbacks(repo)
+        run("c++","-std=c++11","-funsigned-char","-I",repo,"-I",KIT/"tests","-I",repo/"src","-I",repo/"variants/heltec_t1",
             KIT/"tests/screen.cpp","-o",repo/"screen-test",cwd=repo)
         run(repo/"screen-test",stdout=subprocess.DEVNULL)
         run("c++", "-std=c++11", "-I", repo/"variants/heltec_t1",

@@ -1,0 +1,342 @@
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+index cba9cdb..fdc4c6a 100644
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -819,6 +819,29 @@ bool MyMesh::onContactPathRecv(ContactInfo& contact, uint8_t* in_path, uint8_t i
+   return BaseChatMesh::onContactPathRecv(contact, in_path, in_path_len, out_path, out_path_len, extra_type, extra, extra_len);
+ }
+ 
++#ifdef T1_POCKET_UI
++void MyMesh::cancelPocketRequest(const mesh::Packet* expected, const uint8_t tag[4]) {
++  for (int i = 0; i < _mgr->getOutboundTotal(); ++i) {
++    auto pkt = _mgr->getOutboundByIdx(i);
++    if (pkt == expected && pkt->getPayloadType() == PAYLOAD_TYPE_CONTROL && pkt->payload_len == 6 &&
++        pkt->payload[0] == CTL_TYPE_NODE_DISCOVER_REQ && memcmp(pkt->payload + 2, tag, 4) == 0) {
++      releasePacket(_mgr->removeOutboundByIdx(i));
++      break;
++    }
++  }
++}
++
++void MyMesh::logTx(mesh::Packet* packet, int len) {
++  BaseChatMesh::logTx(packet, len);
++  if (_listener) _listener->onPocketTxDone(packet, true);
++}
++
++void MyMesh::logTxFail(mesh::Packet* packet, int len) {
++  BaseChatMesh::logTxFail(packet, len);
++  if (_listener) _listener->onPocketTxDone(packet, false);
++}
++#endif
++
+ void MyMesh::onControlDataRecv(mesh::Packet *packet) {
+   if (packet->payload_len + 4 > sizeof(out_frame)) {
+     MESH_DEBUG_PRINTLN("onControlDataRecv(), payload_len too long: %d", packet->payload_len);
+diff --git a/examples/companion_radio/MyMesh.h b/examples/companion_radio/MyMesh.h
+index eabd540..453528e 100644
+--- a/examples/companion_radio/MyMesh.h
++++ b/examples/companion_radio/MyMesh.h
+@@ -95,6 +95,9 @@ public:
+       virtual void onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) = 0;
+       virtual void onQueueSizeChanged(int msgcount) = 0;
+       virtual void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) { }
++#ifdef T1_POCKET_UI
++      virtual void onPocketTxDone(const mesh::Packet* packet, bool sent) {}
++#endif
+       virtual void onControlDataRecv(const mesh::Packet* pkt) { }
+       virtual void onChannelDataRecv(mesh::Packet *pkt, const mesh::GroupChannel &channel, uint16_t data_type,
+                                      const uint8_t *data, size_t data_len) { }
+@@ -121,6 +124,9 @@ public:
+ 
+   void loop();
+   void handleCmdFrame(size_t len);
++#ifdef T1_POCKET_UI
++  void cancelPocketRequest(const mesh::Packet* packet, const uint8_t tag[4]);
++#endif
+   bool advert(bool flood = false);
+   void enterCLIRescue();
+ 
+@@ -144,6 +150,10 @@ protected:
+   void sendFloodScoped(const ContactInfo& recipient, mesh::Packet* pkt, uint32_t delay_millis=0) override;
+   void sendFloodScoped(const mesh::GroupChannel& channel, mesh::Packet* pkt, uint32_t delay_millis=0) override;
+ 
++#ifdef T1_POCKET_UI
++  void logTx(mesh::Packet* packet, int len) override;
++  void logTxFail(mesh::Packet* packet, int len) override;
++#endif
+   void logRxRaw(float snr, float rssi, const uint8_t raw[], int len) override;
+   bool isAutoAddEnabled() const override;
+   bool shouldAutoAddContactType(uint8_t type) const override;
+diff --git a/examples/companion_radio/ui-new/UITask.cpp b/examples/companion_radio/ui-new/UITask.cpp
+index 9bbd0f0..0ad57f0 100644
+--- a/examples/companion_radio/ui-new/UITask.cpp
++++ b/examples/companion_radio/ui-new/UITask.cpp
+@@ -874,8 +874,16 @@ void UITask::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path
+   }
+ }
+ 
++#ifdef T1_POCKET_UI
++void UITask::onPocketTxDone(const mesh::Packet* packet, bool sent) {
++  if (home) static_cast<HomeScreen*>(home)->finishDiscoveryTx(packet, sent);
++}
++#endif
++
+ void UITask::onControlDataRecv(const mesh::Packet* packet) {
+-#if UI_DISCOVER_SCREEN
++#ifdef T1_POCKET_UI
++  if (home) static_cast<HomeScreen*>(home)->receiveDiscovery(*packet);
++#elif UI_DISCOVER_SCREEN
+   if (packet->payload_len >= 14 && (packet->payload[0] & 0xF0) == CTL_TYPE_NODE_DISCOVER_RESP) {
+     ((HomeScreen *) home)->handleDiscoverResponse(packet);
+   }
+@@ -1090,7 +1098,11 @@ void UITask::loop() {
+       _auto_off = millis() + AUTO_OFF_MILLIS;
+     }
+ #endif
++#ifdef T1_POCKET_UI
++    if (static_cast<HomeScreen*>(home)->displayIdleExpired(millis(), _auto_off)) {
++#else
+     if (millis() > _auto_off) {
++#endif
+       _display->turnOff();
+     }
+ #endif
+diff --git a/examples/companion_radio/ui-new/UITask.h b/examples/companion_radio/ui-new/UITask.h
+index 69ac415..85670bc 100644
+--- a/examples/companion_radio/ui-new/UITask.h
++++ b/examples/companion_radio/ui-new/UITask.h
+@@ -122,6 +122,9 @@ public:
+   void onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) override;
+   void onQueueSizeChanged(int offline_queue_size) override;
+   void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) override;
++#ifdef T1_POCKET_UI
++  void onPocketTxDone(const mesh::Packet* packet, bool sent) override;
++#endif
+   void onControlDataRecv(const mesh::Packet* pkt) override;
+ 
+   // from AbstractUITask
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index 214c36f..6f26ebb 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -1,9 +1,13 @@
+ #pragma once
+ #include "T1BuildSettings.h"
+ 
++#include "T1RepeaterDiscovery.h"
++
+ // Included by ui-new after the board, display, mesh and UITask definitions.
+ class HomeScreen : public UIScreen {
+-  enum Page { Home, GPS, Beeper, Hibernate, Pairing, Count };
++  enum Page { Home, Repeaters, GPS, Beeper, Hibernate, Pairing, Count };
++  T1RepeaterDiscovery discovery;
++  bool scanHeldDisplay = false;
+   UITask* task;
+   NodePrefs* prefs;
+   Page page = Home;
+@@ -47,6 +51,23 @@ public:
+   HomeScreen(UITask* task, mesh::RTCClock*, SensorManager*, NodePrefs* prefs)
+     : task(task), prefs(prefs) {}
+ 
++  // Called only while the display is lit. Grant a whole idle interval after
++  // the scan finishes, including a timeout or failed transmission.
++  bool displayIdleExpired(uint32_t now, unsigned long& deadline) {
++    const bool active = discovery.active();
++    if (active || scanHeldDisplay) deadline = now + T1_SCREEN_TIMEOUT_MS;
++    scanHeldDisplay = active;
++    return int32_t(now - uint32_t(deadline)) >= 0;
++  }
++
++  void finishDiscoveryTx(const mesh::Packet* packet, bool sent) {
++    discovery.txDone(packet, sent, millis());
++  }
++
++  void receiveDiscovery(const mesh::Packet& packet) {
++    discovery.receive(packet, millis());
++  }
++
+   void resetPage() {
+     page = Home;
+     pairingIntro = false;
+@@ -84,7 +105,7 @@ public:
+     char name[sizeof(prefs->node_name)];
+     d.translateUTF8ToBlocks(name, prefs->node_name, sizeof(name));
+     d.setColor(UIColor::title_txt);
+-    d.drawTextEllipsized(3, 3, 94 - d.getTextWidth(status), name);
++    d.drawTextEllipsized(3, 3, 94 - d.getTextWidth(status), visible == Repeaters ? "Repeaters" : name);
+     d.setColor(UIColor::title_bkg);
+     d.fillRect(3, 13, 122, 1);
+ 
+@@ -116,6 +137,8 @@ public:
+         snprintf(detail, sizeof(detail), "-- V");
+       d.drawTextRightAlign(125, 39, detail);
+       hint = "Hold to send advert";
++    } else if (visible == Repeaters) {
++      hint = discovery.draw(d, millis(), detail, sizeof(detail));
+     } else if (visible == GPS) {
+       d.setTextSize(2);
+       d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
+@@ -151,7 +174,7 @@ public:
+     d.fillRect(3, 49, 122, 1);
+     d.setColor(UIColor::title_txt);
+     d.drawTextLeftAlign(3, 54, hint);
+-    for (int i=0; i<pageCount; ++i) {
++    for (int i=0; visible != Repeaters && i<pageCount; ++i) {
+       d.setColor(i == visible ? UIColor::title_txt : UIColor::title_bkg);
+       d.fillRect(125 - (pageCount-1-i)*5, 56, 3, 2);
+     }
+@@ -176,6 +199,8 @@ public:
+       else {
+         task->showAlert(the_mesh.advert(T1Build::floodAdvert) ? "Advert queued" : "Advert queue full", 1200);
+       }
++    } else if (page == Repeaters) {
++      discovery.start(millis());
+     } else if (page == GPS) {
+       task->toggleGPS();
+     } else if (page == Beeper) {
+@@ -189,6 +214,7 @@ public:
+   }
+ 
+   void poll() override {
++    discovery.tick(millis());
+     if (powerOffAfterRelease && !task->isButtonPressed()) task->shutdown();
+   }
+ };
+diff --git a/variants/heltec_t1/T1RepeaterDiscovery.h b/variants/heltec_t1/T1RepeaterDiscovery.h
+new file mode 100644
+index 0000000..905add1
+--- /dev/null
++++ b/variants/heltec_t1/T1RepeaterDiscovery.h
+@@ -0,0 +1,132 @@
++#pragma once
++
++// A scan exists only in RAM. Results survive page changes until the next
++// confirmed transmission. SNR is the T1's reception of the reply, in quarters of a dB.
++class T1RepeaterDiscovery {
++  enum State { Ready, Queued, Listening, Cooldown, Busy } state = Ready;
++  static constexpr uint32_t QueueMs = 30000, WindowMs = 15000, IntervalMs = 30000, BusyMs = 2000;
++  static constexpr unsigned Capacity = 4;
++  struct Entry {
++    uint8_t key[PUB_KEY_SIZE];
++    int8_t snr;
++  } entries[Capacity];
++  unsigned count = 0;
++  uint8_t activeTag[4] = {};
++  uint32_t started = 0;
++  bool scanned = false;
++  const mesh::Packet* queued = nullptr;
++  const char* txError = nullptr;
++
++public:
++  bool active() const { return state == Queued || state == Listening; }
++
++  void tick(uint32_t now) {
++    const uint32_t age = now - started;
++    if (state == Queued && age >= QueueMs) {
++      // A delayed packet still in the queue can be safely withdrawn. An
++      // already in-flight packet remains owned by the dispatcher.
++      the_mesh.cancelPocketRequest(queued, activeTag);
++      queued = nullptr;
++      state = Busy;
++      txError = "TX unconfirmed";
++      started = now;
++      return;
++    }
++    if (state == Listening && age >= WindowMs) state = Cooldown;
++    if ((state == Cooldown && age >= IntervalMs) || (state == Busy && age >= BusyMs)) state = Ready;
++  }
++
++  void start(uint32_t now) {
++    tick(now);
++    if (state != Ready) return;
++    uint8_t request[6] = {CTL_TYPE_NODE_DISCOVER_REQ, 1 << ADV_TYPE_REPEATER};
++    the_mesh.getRNG()->random(request + 2, sizeof(activeTag));
++    auto packet = the_mesh.createControlData(request, sizeof(request));
++    started = now;
++    if (!packet) {
++      txError = "Radio busy";
++      state = Busy;
++      return;
++    }
++    memcpy(activeTag, request + 2, sizeof(activeTag));
++    txError = nullptr;
++    queued = packet;
++    state = Queued;
++    the_mesh.sendZeroHop(packet);
++  }
++
++  void txDone(const mesh::Packet* packet, bool sent, uint32_t now) {
++    if (state != Queued || queued != packet || packet->payload_len != 6 ||
++        packet->getPayloadType() != PAYLOAD_TYPE_CONTROL || packet->payload[0] != CTL_TYPE_NODE_DISCOVER_REQ ||
++        memcmp(packet->payload + 2, activeTag, sizeof(activeTag)) != 0) return;
++    queued = nullptr;
++    started = now;
++    if (sent) {
++      count = 0;
++      scanned = true;
++      state = Listening;
++    } else {
++      txError = "Transmit failed";
++      state = Busy;
++    }
++  }
++
++  void receive(const mesh::Packet& packet, uint32_t now) {
++    tick(now);
++    if (state != Listening || packet.getRouteType() != ROUTE_TYPE_DIRECT || packet.getPathHashCount() != 0 ||
++        packet.payload_len != 6 + PUB_KEY_SIZE || packet.payload[0] != (CTL_TYPE_NODE_DISCOVER_RESP | ADV_TYPE_REPEATER) ||
++        memcmp(packet.payload + 2, activeTag, sizeof(activeTag)) != 0) return;
++    const uint8_t* key = packet.payload + 6;
++    if (memcmp(key, the_mesh.self_id.pub_key, PUB_KEY_SIZE) == 0) return;
++    for (unsigned i = 0; i < count; ++i) {
++      if (memcmp(key, entries[i].key, PUB_KEY_SIZE) != 0) continue;
++      if (packet._snr <= entries[i].snr) return;
++      --count;
++      memmove(entries + i, entries + i + 1, (count - i) * sizeof(Entry));
++      break;
++    }
++    unsigned pos = 0;
++    while (pos < count && (entries[pos].snr > packet._snr ||
++           (entries[pos].snr == packet._snr && memcmp(entries[pos].key, key, PUB_KEY_SIZE) < 0))) ++pos;
++    if (pos == Capacity) return;
++    if (count < Capacity) ++count;
++    memmove(entries + pos + 1, entries + pos, (count - pos - 1) * sizeof(Entry));
++    memcpy(entries[pos].key, key, PUB_KEY_SIZE);
++    entries[pos].snr = packet._snr;
++  }
++
++  const char* draw(DisplayDriver& d, uint32_t now, char* footer, size_t size) {
++    tick(now);
++    if (state == Queued) return "Request queued";
++    if (!count) {
++      const char* empty = state == Listening ? "Waiting for replies" : txError ? txError : scanned ? "No repeaters heard" : "No scan yet";
++      d.drawTextLeftAlign(3, 26, empty);
++    }
++    for (unsigned i = 0; i < count; ++i) {
++      const auto& e = entries[i];
++      const auto* contact = the_mesh.lookupContactByPubKey(e.key, PUB_KEY_SIZE);
++      char name[33];
++      if (contact && contact->name[0]) {
++        char raw[sizeof(contact->name) + 1] = {};
++        memcpy(raw, contact->name, sizeof(contact->name));
++        d.translateUTF8ToBlocks(name, raw, sizeof(name));
++      } else {
++        snprintf(name, sizeof(name), "%02X%02X%02X%02X", e.key[0], e.key[1], e.key[2], e.key[3]);
++      }
++      const int mag = e.snr < 0 ? -int(e.snr) : int(e.snr);
++      char snr[16];
++      snprintf(snr, sizeof(snr), "%s%d.%02d dB", e.snr < 0 ? "-" : "", mag / 4, (mag % 4) * 25);
++      const int y = 16 + int(i) * 8;
++      d.drawTextEllipsized(3, y, 119 - d.getTextWidth(snr), name);
++      d.drawTextRightAlign(125, y, snr);
++    }
++    if (state == Listening) return "Listening...";
++    if (state == Busy) return count ? txError : "Retry shortly";
++    if (state == Cooldown) {
++      const unsigned seconds = (IntervalMs - (now - started) + 999) / 1000;
++      snprintf(footer, size, "Scan again in %us", seconds);
++      return footer;
++    }
++    return "Hold to discover repeaters";
++  }
++};

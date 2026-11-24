@@ -8,9 +8,9 @@ Home shows the clock, queued messages and battery voltage. A plug replaces the b
 
 <img src="screen-preview.png" width="652" alt="Eight community firmware renders. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS and Beeper toggled off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
 
-### Discover Repeaters · development preview
+### Discover Repeaters
 
-In the review build, one upper tap from Home opens Repeaters. Hold either button there for one nearby scan. The screen shows when the request is queued, then lists up to four repeaters by received signal-to-noise ratio (SNR), strongest first. The examples use simulated replies.
+One upper tap from Home opens Repeaters. Hold either button there for one nearby scan. The screen shows when the request is queued, then lists up to four repeaters by received signal-to-noise ratio (SNR), strongest first. A lit display stays on throughout the queued request and the 15-second listening window. When the scan finishes, the full configured idle timeout starts so you can read the results. The examples use simulated replies.
 
 <img src="docs/discover-repeaters-preview.png" width="652" alt="Four development renders. The Repeaters page prompts a hold to discover, then shows the queued request, a listening screen with repeater names or key prefixes and SNR in dB, and a countdown until another scan." />
 
