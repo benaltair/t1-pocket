@@ -2,6 +2,18 @@
 
 An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with the nRF52840, SX1262 and 160 × 80 colour screen. It builds application-only updates against a pinned official MeshCore companion release. The combined build accepts USB serial or paired Bluetooth, one active client at a time. A USB charger leaves Bluetooth available. [Heltec hardware](https://heltec.org/project/mesh-node-t1/) · [Upstream firmware](https://github.com/meshcore-dev/MeshCore)
 
+## Screen preview
+
+Home shows the clock, queued messages and battery voltage. A plug replaces the battery bars on USB. The bottom line tells you what a hold will do on each page.
+
+<img src="screen-preview.png" width="652" alt="Eight community firmware renders. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS and Beeper toggled off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
+
+### Discover Repeaters · development preview
+
+In the review build, one upper tap from Home opens Repeaters. Hold either button there for one nearby scan. The screen shows when the request is queued, then lists up to four repeaters by received signal-to-noise ratio (SNR), strongest first. The examples use simulated replies.
+
+<img src="docs/discover-repeaters-preview.png" width="652" alt="Four development renders. The Repeaters page prompts a hold to discover, then shows the queued request, a listening screen with repeater names or key prefixes and SNR in dB, and a countdown until another scan." />
+
 ## On the node
 
 Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. GPS switches the receiver on or off. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after ten seconds of inactivity, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
@@ -14,8 +26,6 @@ Each restart asks for a phone or computer time sync. When the owner has enabled 
 | --- | --- | --- |
 | `community` (default) | UTC | Flood with the node’s configured default scope |
 | `nearby-pacific` | Vancouver Pacific time, UTC−7 year-round | Zero-hop |
-
-[Preview the community screens](screen-preview.png)
 
 The icon in the header shows four coarse voltage bands when running on battery. Home also shows measured terminal voltage. Bars appear at 3.45, 3.65, 3.80 and 4.00 V. These are approximate bands for the T1’s single-cell lithium pack. They have not been calibrated against a full discharge of a specific unit. On USB the icon shows a plug and Home still shows voltage. The charger’s CHRG output drives the red LED. Firmware can see USB power and battery voltage, but the V1.0 schematic shows no processor connection to CHRG or DONE. An out-of-range battery reading displays “-- V”. [T1 schematic](https://resource.heltec.cn/download/Mesh_Node_T1/schematic/Mesh_Node_T1_V1.0.pdf)
 
