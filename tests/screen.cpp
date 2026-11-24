@@ -1,6 +1,8 @@
 // Exercise the real page class using the ST7735 driver's coordinate scale and
 // fixed-width font metrics. Output drawing commands for offline previews.
 #include <cassert>
+#include <ctime>
+#include <T1BuildSettings.h>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -69,7 +71,7 @@ struct Screen : public DisplayDriver {
     if (y==67) hint=s;
     if (y==48) detail=s;
     if (size == 2) largeText=s;
-    if (strcmp(s,"PCT")==0 || strcmp(s,"UTC")==0) zone=s;
+    if (size==1 && x==68 && y==30) zone=s;
     if (strstr(s," V")) voltage=s;
     printf("T %u %d %d %d %s\n",color,x,y,size,s);
   }
@@ -95,21 +97,15 @@ int main(){
   assert(display.plug && display.bars==0 && display.voltage=="3.81 V");
   home.handleInput(KEY_ENTER);
   assert(!the_mesh.sent && !task.alert.empty());
-  const struct { uint32_t utc; const char* pacific; const char* universal; } times[] = {
-    {1795503540, "23:59", "06:59"},
-    {1795503600, "00:00", "07:00"},
-    {1782919800, "08:30", "15:30"},
-  };
-  for (const auto& test : times) {
-    rtc_clock.setCurrentTime(test.utc);
+  for (const uint32_t utc : {1795503540u, 1795503600u, 1782919800u, 1795478340u}) {
+    rtc_clock.setCurrentTime(utc);
+    const time_t shifted = int64_t(utc) + T1Build::utcOffsetMinutes * 60;
+    char expected[6];
+    strftime(expected, sizeof(expected), "%H:%M", gmtime(&shifted));
     display.zone.clear();
     puts("PAGE zone-check");home.render(display);
-#ifdef T1_PACIFIC_TIME
-    assert(display.largeText==test.pacific && display.zone=="PCT");
-#else
-    assert(display.largeText==test.universal && display.zone=="UTC");
-#endif
-    assert(rtc_clock.getCurrentTime()==test.utc);
+    assert(display.largeText==expected && display.zone==T1Build::clockLabel);
+    assert(rtc_clock.getCurrentTime()==utc);
   }
   rtc_clock.setCurrentTime(1795470300);
   board.usb=false;
@@ -123,11 +119,7 @@ int main(){
   puts("PAGE home");home.render(display);
   home.handleInput(KEY_ENTER);
   assert(the_mesh.sent==1);
-#ifdef T1_FLOOD_ADVERT
-  assert(the_mesh.flooded);
-#else
-  assert(!the_mesh.flooded);
-#endif
+  assert(the_mesh.flooded==T1Build::floodAdvert);
   board.usb=true;
   home.handleInput(KEY_NEXT);
   display.detail.clear();

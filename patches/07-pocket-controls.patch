@@ -114,7 +114,7 @@ index a96af6b..d8d5310 100644
 -    if (page == Home) {
 +    if (visible == Home) {
        if (rtc_clock.isSynced()) {
- #ifdef T1_PACIFIC_TIME
+         const int utcMinutes = (rtc_clock.getCurrentTime() / 60) % 1440;
 @@ -90,12 +121,10 @@ public:
        d.drawTextRightAlign(125, 39, detail);
        hint = "Hold to send advert";

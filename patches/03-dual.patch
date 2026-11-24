@@ -122,7 +122,7 @@ diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
 diff --git a/variants/heltec_t1/platformio.ini b/variants/heltec_t1/platformio.ini
 --- a/variants/heltec_t1/platformio.ini
 +++ b/variants/heltec_t1/platformio.ini
-@@ -65,6 +65,9 @@
+@@ -65,5 +65,8 @@
    -I examples/companion_radio/ui-new
    -D T1_COMPANION_CLOCK
    -D T1_POCKET_UI
@@ -130,7 +130,6 @@ diff --git a/variants/heltec_t1/platformio.ini b/variants/heltec_t1/platformio.i
 +  -D ENABLE_USB_INTERFACE
 +  -Wl,--wrap=enterSerialDfu
    -D UI_DISCOVER_SCREEN=0
-   -D AUTO_OFF_MILLIS=10000
    -D MAX_CONTACTS=350
 diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
 --- a/examples/companion_radio/MyMesh.cpp

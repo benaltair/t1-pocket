@@ -16,16 +16,11 @@ In the review build, one upper tap from Home opens Repeaters. Hold either button
 
 ## On the node
 
-Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. GPS switches the receiver on or off. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after ten seconds of inactivity, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. GPS switches the receiver on or off. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after 30 seconds of inactivity by default, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
 
 When Bluetooth is available and a phone is disconnected, the first button wake shows the six-digit pairing PIN. Tap either button to dismiss it. Later wakes open Home. To see the PIN again, tap the lower button from Home. As soon as a Bluetooth connection is secured, the PIN disappears and both buttons skip the Pairing page. Disconnecting leaves the screen asleep if it was asleep. USB charging or a wired session alone does not hide the PIN.
 
-Each restart asks for a phone or computer time sync. When the owner has enabled GPS, a fresh dated fix can also set time. The firmware uses the local companion’s clock-sync command and accepts corrections backwards. Mesh timestamps use UTC in both presets.
-
-| Build preset | Clock display | Home button advert |
-| --- | --- | --- |
-| `community` (default) | UTC | Flood with the node’s configured default scope |
-| `nearby-pacific` | Vancouver Pacific time, UTC−7 year-round | Zero-hop |
+Each restart asks for a phone or computer time sync. When the owner has enabled GPS, a fresh dated fix can also set time. The firmware uses the local companion’s clock-sync command and accepts corrections backwards. The mesh always uses UTC timestamps. The build settings control the clock shown on the display.
 
 The icon in the header shows four coarse voltage bands when running on battery. Home also shows measured terminal voltage. Bars appear at 3.45, 3.65, 3.80 and 4.00 V. These are approximate bands for the T1’s single-cell lithium pack. They have not been calibrated against a full discharge of a specific unit. On USB the icon shows a plug and Home still shows voltage. The charger’s CHRG output drives the red LED. Firmware can see USB power and battery voltage, but the V1.0 schematic shows no processor connection to CHRG or DONE. An out-of-range battery reading displays “-- V”. [T1 schematic](https://resource.heltec.cn/download/Mesh_Node_T1/schematic/Mesh_Node_T1_V1.0.pdf)
 
@@ -37,7 +32,21 @@ With Python 3.9+, Git, a C++ compiler and PlatformIO Core on PATH, build from th
 python3 update.py --out builds
 ```
 
-The default is the combined USB/Bluetooth companion and the community preset. For a Vancouver clock and nearby adverts, add `--preset nearby-pacific`. Use `--profile pocket` for Bluetooth only with the pocket screens or `--profile clock` for the Bluetooth clock fix with the original MeshCore screens. The build produces a UF2, a Nordic application DFU ZIP and a manifest with the upstream commit and SHA-256 values. Dependencies follow the selected upstream release. Manifests identify individual builds.
+One command builds the USB/Bluetooth companion. The public defaults are a 30-second idle timeout, a UTC clock and a flood advert. To set your own defaults, copy the example once and edit the local file.
+
+```sh
+cp pocket.example.json pocket.local.json
+python3 update.py --out builds
+```
+
+| Setting | Meaning |
+| --- | --- |
+| `screen_timeout_seconds` | Idle time before the display sleeps, from 1 to 3600 seconds. |
+| `utc_offset_minutes` | Fixed display offset from UTC in minutes, from −720 to +840. |
+| `clock_label` | Up to eight letters, digits, or `+`, `-`, `:` shown beside the time. |
+| `advert_scope` | `flood` uses the node’s configured scope. `zero-hop` reaches direct neighbours. |
+
+Git ignores `*.local.json` and the build output. A local file can override just the settings you want. Supplying only an offset gives the clock a numeric offset label. Pass `--config path/to/file.json` to select another file. CI always builds the checked-in example. The build produces a UF2, a Nordic application DFU ZIP and a manifest with the upstream commit and SHA-256 values. Dependencies follow the selected upstream release. Manifests identify individual builds.
 
 1. Start with a **Heltec Mesh Node T1 already running a compatible MeshCore companion**, and allow the phone to receive queued messages. Export that node’s identity, contacts, channels and settings to its owner’s private backup.
 2. Connect by USB and double-press the **rear power button**. Open the mounted drive’s `INFO_UF2.TXT` and confirm `Board-ID: mesh-node-t1` and `SoftDevice: S140 6.1.1`. These images cover only the T1 application partition. Other boards, repeaters, room servers and migrations from another firmware family need their own build or migration procedure.
@@ -51,7 +60,7 @@ On a correctly identified T1, an application-only MeshCore update preserves the 
 
 `upstream.json` pins the reviewed release. To test the latest stable release on a computer, run `python3 update.py --latest --check-only` and then `python3 update.py --latest --out builds`. Host checks exercise clock arithmetic, button timing, pairing visibility, screen navigation and companion-port ownership. Full builds cross-check the UF2 pages against the Intel HEX, the Nordic application package against the UF2, and the combined build’s USB-update entry point against its ELF.
 
-The included GitHub Actions workflow checks GitHub’s published MeshCore companion releases daily at 09:17 UTC and on manual dispatch. Each new stable release gets five builds covering the supported profiles and presets, including when several releases arrive between checks. A separate draft PR proposes each tag and its exact upstream commit. Previously reviewed or closed proposals stay closed. Its description links to the test run and records success or failure. Conflicts stay visible for a maintainer to port and retest. Pull requests run the checks again when a contributor pushes changes. Review and merge on the repository’s default branch after a T1 hardware check.
+The included GitHub Actions workflow checks GitHub’s published MeshCore companion releases daily at 09:17 UTC and on manual dispatch. Each new stable release gets the public companion build and host tests, including when several releases arrive between checks. A separate draft PR proposes each tag and its exact upstream commit. Previously reviewed or closed proposals stay closed. Its description links to the test run and records success or failure. Conflicts stay visible for a maintainer to port and retest. Pull requests run the checks again when a contributor pushes changes. Review and merge on the repository’s default branch after a T1 hardware check.
 
 To activate this in your own GitHub repository, push this source to `main`, enable Actions, and allow GitHub Actions to create pull requests in repository settings. Set the optional repository Actions variable `T1_REVIEWER` to the GitHub login that should receive review requests. The workflow publishes build manifests as CI artifacts. Creating a public firmware release is a separate maintainer action.
 

@@ -13,14 +13,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [dual, pocket, clock]
-        preset: [community, nearby-pacific]
-        exclude:
-          - profile: clock
-            preset: nearby-pacific
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -28,16 +20,15 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
+      - run: python tests/settings.py
       - run: python -m pip install platformio==6.2.0
       - name: Test and build for the T1
         env:
           TAG: ${{ inputs.tag }}
           COMMIT: ${{ inputs.commit }}
-          PROFILE: ${{ matrix.profile }}
-          PRESET: ${{ matrix.preset }}
-        run: python update.py --release "$TAG" --expect-commit "$COMMIT" --profile "$PROFILE" --preset "$PRESET" --out builds
+        run: python update.py --release "$TAG" --expect-commit "$COMMIT" --config pocket.example.json --out builds
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: manifest-${{ inputs.tag }}-${{ matrix.profile }}-${{ matrix.preset }}
+          name: manifest-${{ inputs.tag }}
           path: builds/*/manifest.json
           if-no-files-found: error
