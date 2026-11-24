@@ -43,6 +43,8 @@ struct UITask {
   bool isButtonPressed() { return pressed; }
   void shutdown() { shutdownRequested=true; }
 };
+bool gpsFix = false;
+bool t1HasGpsFix() { return gpsFix; }
 #include <T1HomeScreen.h>
 
 ColorVal UIColor::title_bkg=0x4227, UIColor::title_txt=0xbcf0,
@@ -127,7 +129,9 @@ int main(){
   assert(display.detail.empty() && display.hint=="Hold to turn GPS on");
   home.handleInput(KEY_ENTER);assert(task.gps);
   puts("PAGE gps-on");home.render(display);
-  assert(display.detail.empty() && display.hint=="Hold to turn GPS off");
+  assert(display.detail=="Searching for fix" && display.hint=="Hold to turn GPS off");
+  gpsFix=true;puts("PAGE gps-fix");home.render(display);assert(display.detail=="Position fix");
+  gpsFix=false;home.render(display);assert(display.detail=="Searching for fix");
   home.handleInput(KEY_NEXT);
   puts("PAGE beeper-off");home.render(display);
   assert(display.largeText=="Beeper off" && display.hint=="Hold to unmute" && task.beeperToggles==0);

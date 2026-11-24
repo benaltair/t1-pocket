@@ -1,0 +1,96 @@
+diff --git a/src/helpers/sensors/MicroNMEALocationProvider.h b/src/helpers/sensors/MicroNMEALocationProvider.h
+index f1aabdc..d7e3c1a 100644
+--- a/src/helpers/sensors/MicroNMEALocationProvider.h
++++ b/src/helpers/sensors/MicroNMEALocationProvider.h
+@@ -117,6 +117,9 @@ public :
+     }
+ 
+     void begin() override {
++#ifdef T1_POCKET_UI
++        _fix_seen = false;
++#endif
+         _begin_calls++;
+         claim();
+         if (_pin_en != -1) {
+@@ -128,6 +131,9 @@ public :
+     }
+ 
+     void reset() override {
++#ifdef T1_POCKET_UI
++        _fix_seen = false;
++#endif
+         if (_pin_reset != -1) {
+             digitalWrite(_pin_reset, GPS_RESET_ACTIVE);
+             delay(10);
+@@ -141,6 +147,9 @@ public :
+     }
+ 
+     void stop() override {
++#ifdef T1_POCKET_UI
++        _fix_seen = false;
++#endif
+         _stop_calls++;
+ #ifdef T1_COMPANION_CLOCK
+         have_dated_fix = false;
+@@ -174,6 +183,11 @@ public :
+     }
+     long satellitesCount() override { return nmea.getNumSatellites(); }
+     bool isValid() override { return nmea.isValid(); }
++#ifdef T1_POCKET_UI
++    bool hasRecentFix() {
++        return isEnabled() && _fix_seen && isValid() && ageMs(_last_fix_ms) < 5000;
++    }
++#endif
+ 
+     long getTimestamp() override { 
+         DateTime dt(nmea.getYear(), nmea.getMonth(),nmea.getDay(),nmea.getHour(),nmea.getMinute(),nmea.getSecond());
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index da466e6..214c36f 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -120,6 +120,10 @@ public:
+       d.setTextSize(2);
+       d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
+       d.setTextSize(1);
++      if (gps) {
++        d.setColor(UIColor::secondary_txt);
++        d.drawTextLeftAlign(3, 39, t1HasGpsFix() ? "Position fix" : "Searching for fix");
++      }
+       hint = gps ? "Hold to turn GPS off" : "Hold to turn GPS on";
+     } else if (visible == Beeper) {
+       const bool muted = task->isBuzzerQuiet();
+diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
+index c3b2d94..2a8bf32 100644
+--- a/variants/heltec_t1/target.cpp
++++ b/variants/heltec_t1/target.cpp
+@@ -45,6 +45,16 @@ EnvironmentSensorManager sensors = EnvironmentSensorManager(nmea);
+ EnvironmentSensorManager sensors;
+ #endif
+ 
++#ifdef T1_POCKET_UI
++bool t1HasGpsFix() {
++#if ENV_INCLUDE_GPS
++  return nmea.hasRecentFix();
++#else
++  return false;
++#endif
++}
++#endif
++
+ #ifdef DISPLAY_CLASS
+ DISPLAY_CLASS display(&board.periph_power);
+ MomentaryButton user_btn(PIN_USER_BTN, 1000, true);
+diff --git a/variants/heltec_t1/target.h b/variants/heltec_t1/target.h
+index 0ac32a0..035eca6 100644
+--- a/variants/heltec_t1/target.h
++++ b/variants/heltec_t1/target.h
+@@ -25,6 +25,9 @@ extern T1CompanionClock rtc_clock;
+ extern AutoDiscoverRTCClock rtc_clock;
+ #endif
+ extern EnvironmentSensorManager sensors;
++#ifdef T1_POCKET_UI
++bool t1HasGpsFix();
++#endif
+ 
+ #ifdef DISPLAY_CLASS
+ extern DISPLAY_CLASS display;

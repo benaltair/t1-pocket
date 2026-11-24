@@ -36,7 +36,7 @@ def select_patches(profile):
     for patch in patches:
         if profile == "clock" and patch.name != "01-clock.patch":
             continue
-        if profile == "pocket" and patch.name not in ("01-clock.patch", "02-screen.patch", "06-advert.patch", "07-pocket-controls.patch", "08-beeper.patch"):
+        if profile == "pocket" and patch.name in ("03-dual.patch", "04-contact-sync.patch", "05-wired-update.patch"):
             continue
         yield patch
 
