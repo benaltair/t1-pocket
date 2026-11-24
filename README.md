@@ -6,17 +6,17 @@ An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with 
 
 Home shows the clock, queued messages and battery voltage. A plug replaces the battery bars on USB. The bottom line tells you what a hold will do on each page.
 
-<img src="screen-preview.png" width="652" alt="Eight community firmware renders. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS and Beeper toggled off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
+<img src="screen-preview.png" width="652" alt="Eight firmware screens. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS searching and holding a position fix, then Beeper off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
 
 ### Discover Repeaters
 
 One upper tap from Home opens Repeaters. Hold either button there for one nearby scan. The screen shows when the request is queued, then lists up to four repeaters by received signal-to-noise ratio (SNR), strongest first. A lit display stays on throughout the queued request and the 15-second listening window. When the scan finishes, the full configured idle timeout starts so you can read the results. The examples use simulated replies.
 
-<img src="docs/discover-repeaters-preview.png" width="652" alt="Four development renders. The Repeaters page prompts a hold to discover, then shows the queued request, a listening screen with repeater names or key prefixes and SNR in dB, and a countdown until another scan." />
+<img src="docs/discover-repeaters-preview.png" width="652" alt="Four firmware screens. The Repeaters page prompts a hold to discover, then shows the queued request, a listening screen with repeater names or key prefixes and SNR in dB, and a countdown until another scan." />
 
 ## On the node
 
-Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. The GPS page toggles the receiver and shows “Searching for fix” until it receives a fresh position fix. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after 30 seconds of inactivity by default, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. The GPS page toggles the receiver and shows “Searching for fix” or “Position fix” while it is on. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after 30 seconds of inactivity by default, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
 
 When Bluetooth is available and a phone is disconnected, the first button wake shows the six-digit pairing PIN. Tap either button to dismiss it. Later wakes open Home. To see the PIN again, tap the lower button from Home. As soon as a Bluetooth connection is secured, the PIN disappears and both buttons skip the Pairing page. Disconnecting leaves the screen asleep if it was asleep. USB charging or a wired session alone does not hide the PIN.
 
@@ -58,7 +58,7 @@ On a correctly identified T1, an application-only MeshCore update preserves the 
 
 ## Following MeshCore releases
 
-`upstream.json` pins the reviewed release. To test the latest stable release on a computer, run `python3 update.py --latest --check-only` and then `python3 update.py --latest --out builds`. Host checks exercise clock arithmetic, button timing, pairing visibility, screen navigation and companion-port ownership. Full builds cross-check the UF2 pages against the Intel HEX, the Nordic application package against the UF2, and the combined build’s USB-update entry point against its ELF.
+`upstream.json` pins the reviewed release. To test the latest stable release on a computer, run `python3 update.py --latest --check-only` and then `python3 update.py --latest --out builds`. Host checks exercise clock arithmetic, button timing, pairing visibility, screen navigation, discovery replies and timeouts, and companion-port ownership. Full builds cross-check the UF2 pages against the Intel HEX, the Nordic application package against the UF2, and the combined build’s USB-update entry point against its ELF.
 
 The included GitHub Actions workflow checks GitHub’s published MeshCore companion releases daily at 09:17 UTC and on manual dispatch. Each new stable release gets the public companion build and host tests, including when several releases arrive between checks. A separate draft PR proposes each tag and its exact upstream commit. Previously reviewed or closed proposals stay closed. Its description links to the test run and records success or failure. Conflicts stay visible for a maintainer to port and retest. Pull requests run the checks again when a contributor pushes changes. Review and merge on the repository’s default branch after a T1 hardware check.
 

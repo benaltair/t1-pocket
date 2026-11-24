@@ -284,8 +284,12 @@ int main(){
   home.handleInput(KEY_ENTER);assert(task.gps);
   puts("PAGE gps-on");home.render(display);
   assert(display.detail=="Searching for fix" && display.hint=="Hold to turn GPS off");
-  gpsFix=true;home.render(display);assert(display.detail=="Position fix");
-  gpsFix=false;home.render(display);assert(display.detail=="Searching for fix");
+  gpsFix=true;
+  puts("PAGE gps-fix");home.render(display);
+  assert(display.detail=="Position fix");
+  gpsFix=false;
+  puts("PAGE gps-lost");home.render(display);
+  assert(display.detail=="Searching for fix");
   home.handleInput(KEY_NEXT);
   puts("PAGE beeper-off");home.render(display);
   assert(display.largeText=="Beeper off" && display.hint=="Hold to unmute" && task.beeperToggles==0);
