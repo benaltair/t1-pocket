@@ -28,6 +28,10 @@ struct SensorManager {};
 struct UITask {
   bool gps=false, pressed=false, shutdownRequested=false;
   std::string alert;
+  bool muted=true;
+  unsigned beeperToggles=0;
+  bool isBuzzerQuiet() { return muted; }
+  void toggleBuzzer() { muted=!muted; ++beeperToggles; }
   bool getGPSState() { return gps; }
   unsigned millivolts=3810;
   unsigned getBattMilliVolts() { return millivolts; }
@@ -133,6 +137,17 @@ int main(){
   puts("PAGE gps-on");home.render(display);
   assert(display.detail.empty() && display.hint=="Hold to turn GPS off");
   home.handleInput(KEY_NEXT);
+  puts("PAGE beeper-off");home.render(display);
+  assert(display.largeText=="Beeper off" && display.hint=="Hold to unmute" && task.beeperToggles==0);
+  home.handleInput(KEY_ENTER);
+  puts("PAGE beeper-on");home.render(display);
+  assert(display.largeText=="Beeper on" && display.hint=="Hold to mute" && task.beeperToggles==1);
+  home.handleInput(KEY_PREV);
+  home.handleInput(KEY_NEXT);
+  assert(!task.muted && task.beeperToggles==1);
+  home.handleInput(KEY_ENTER);
+  assert(task.muted && task.beeperToggles==2);
+  home.handleInput(KEY_NEXT);
   puts("PAGE hibernate");home.render(display);
   home.handleInput(KEY_NEXT);
   puts("PAGE pairing");home.render(display);
@@ -149,7 +164,7 @@ int main(){
   // USB is present. Only a secured Bluetooth session hides the PIN.
   puts("PAGE pairing");
   home.wakeForButton();
-  assert(draw()=="000042" && display.hint=="Tap to dismiss" && display.dots==4);
+  assert(draw()=="000042" && display.hint=="Tap to dismiss" && display.dots==5);
   puts("PAGE dismissal-check");
   assert(!home.handleInput(KEY_ENTER));
   home.handleInput(KEY_PREV);
@@ -161,7 +176,7 @@ int main(){
   bluetooth_interface.connected=true;
   puts("PAGE bluetooth-connected");
   // Catch a connection arriving between the input poll and the next paint.
-  assert(draw().find(':')!=std::string::npos && display.dots==3);
+  assert(draw().find(':')!=std::string::npos && display.dots==4);
   home.handleInput(KEY_ENTER);
   assert(the_mesh.sent==1);
   assert(home.updatePairingState());
@@ -171,6 +186,7 @@ int main(){
   home.handleInput(KEY_PREV);assert(draw()=="Hibernate");
   home.handleInput(KEY_NEXT);assert(draw().find(':')!=std::string::npos);
   home.handleInput(KEY_NEXT);assert(draw()=="GPS on");
+  home.handleInput(KEY_NEXT);assert(draw()=="Beeper off");
   home.handleInput(KEY_NEXT);assert(draw()=="Hibernate");
   home.handleInput(KEY_NEXT);assert(draw().find(':')!=std::string::npos);
 
@@ -187,11 +203,11 @@ int main(){
   home.handleInput(KEY_PREV);assert(draw()=="000042");
   bluetooth_interface.enabled=false;
   assert(home.updatePairingState());
-  home.wakeForButton();assert(draw().find(':')!=std::string::npos && display.dots==3);
+  home.wakeForButton();assert(draw().find(':')!=std::string::npos && display.dots==4);
   bluetooth_interface.enabled=true;
   the_mesh.pin=0;
   assert(!home.updatePairingState());
-  home.wakeForButton();assert(draw().find(':')!=std::string::npos && display.dots==3);
+  home.wakeForButton();assert(draw().find(':')!=std::string::npos && display.dots==4);
   home.handleInput(KEY_PREV);assert(draw()=="Hibernate");
   assert(the_mesh.sent==1 && task.gps && !task.shutdownRequested);
   task.pressed=true;home.handleInput(KEY_ENTER);home.poll();assert(!task.shutdownRequested);

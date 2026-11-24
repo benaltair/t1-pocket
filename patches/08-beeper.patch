@@ -1,0 +1,58 @@
+diff --git a/examples/companion_radio/ui-new/UITask.cpp b/examples/companion_radio/ui-new/UITask.cpp
+index 4a29e88..0b87dc0 100644
+--- a/examples/companion_radio/ui-new/UITask.cpp
++++ b/examples/companion_radio/ui-new/UITask.cpp
+@@ -1219,7 +1219,9 @@ void UITask::toggleBuzzer() {
+     }
+     _node_prefs->buzzer_quiet = buzzer.isQuiet();
+     the_mesh.savePrefs();
++#ifndef T1_POCKET_UI
+     showAlert(buzzer.isQuiet() ? "Buzzer: OFF" : "Buzzer: ON", 800);
++#endif
+     _next_refresh = 0;  // trigger refresh
+   #endif
+ }
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index d8d5310..db95010 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -2,7 +2,7 @@
+ 
+ // Included by ui-new after the board, display, mesh and UITask definitions.
+ class HomeScreen : public UIScreen {
+-  enum Page { Home, GPS, Hibernate, Pairing, Count };
++  enum Page { Home, GPS, Beeper, Hibernate, Pairing, Count };
+   UITask* task;
+   NodePrefs* prefs;
+   Page page = Home;
+@@ -125,6 +125,12 @@ public:
+       d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
+       d.setTextSize(1);
+       hint = gps ? "Hold to turn GPS off" : "Hold to turn GPS on";
++    } else if (visible == Beeper) {
++      const bool muted = task->isBuzzerQuiet();
++      d.setTextSize(2);
++      d.drawTextLeftAlign(3, 19, muted ? "Beeper off" : "Beeper on");
++      d.setTextSize(1);
++      hint = muted ? "Hold to unmute" : "Hold to mute";
+     } else if (visible == Hibernate) {
+       d.setTextSize(2);
+       d.drawTextLeftAlign(3, 19, "Hibernate");
+@@ -147,7 +153,7 @@ public:
+     d.drawTextLeftAlign(3, 54, hint);
+     for (int i=0; i<pageCount; ++i) {
+       d.setColor(i == visible ? UIColor::title_txt : UIColor::title_bkg);
+-      d.fillRect(110+i*5, 56, 3, 2);
++      d.fillRect(125 - (pageCount-1-i)*5, 56, 3, 2);
+     }
+     return 1000;
+   }
+@@ -177,6 +183,8 @@ public:
+       }
+     } else if (page == GPS) {
+       task->toggleGPS();
++    } else if (page == Beeper) {
++      task->toggleBuzzer();
+     } else if (page == Hibernate) {
+       powerOffAfterRelease = true;
+     } else {

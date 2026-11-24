@@ -34,7 +34,7 @@ def apply_and_test(repo, profile, flags):
     for patch in patches:
         if profile == "clock" and patch.name != "01-clock.patch":
             continue
-        if profile == "pocket" and patch.name not in ("01-clock.patch", "02-screen.patch", "06-advert.patch", "07-pocket-controls.patch"):
+        if profile == "pocket" and patch.name not in ("01-clock.patch", "02-screen.patch", "06-advert.patch", "07-pocket-controls.patch", "08-beeper.patch"):
             continue
         run("git", "apply", "--check", patch, cwd=repo)
         run("git", "apply", patch, cwd=repo)
@@ -76,8 +76,8 @@ def main():
     if args.preset not in ("community", "nearby-pacific"):
         parser.error("Unknown preset")
     personal = args.preset == "nearby-pacific"
-    suffix = ({"clock":"clock1","pocket":"pocket5","dual":"dual6"} if personal else
-              {"clock":"clock1","pocket":"ble2","dual":"share2"})[args.profile]
+    suffix = ({"clock":"clock1","pocket":"pocket6","dual":"dual7"} if personal else
+              {"clock":"clock1","pocket":"ble3","dual":"share3"})[args.profile]
     flags = [] if args.profile=="clock" else ["-DT1_PACIFIC_TIME" if personal else "-DT1_FLOOD_ADVERT"]
     version = f"{tag.removeprefix('companion-')}-t1{suffix}"
     if len(version)>19: raise ValueError("Version exceeds companion wire field")

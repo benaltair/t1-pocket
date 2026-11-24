@@ -4,7 +4,7 @@ An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with 
 
 ## On the node
 
-Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync, GPS switches the receiver on or off, and Hibernate powers down after release. The screen sleeps after ten seconds of inactivity, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. GPS switches the receiver on or off. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after ten seconds of inactivity, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
 
 When Bluetooth is available and a phone is disconnected, the first button wake shows the six-digit pairing PIN. Tap either button to dismiss it. Later wakes open Home. To see the PIN again, tap the lower button from Home. As soon as a Bluetooth connection is secured, the PIN disappears and both buttons skip the Pairing page. Disconnecting leaves the screen asleep if it was asleep. USB charging or a wired session alone does not hide the PIN.
 
