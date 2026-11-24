@@ -33,6 +33,8 @@ The default is the combined USB/Bluetooth companion and the community preset. Fo
 2. Connect by USB and double-press the **rear power button**. Open the mounted drive’s `INFO_UF2.TXT` and confirm `Board-ID: mesh-node-t1` and `SoftDevice: S140 6.1.1`. These images cover only the T1 application partition. Other boards, repeaters, room servers and migrations from another firmware family need their own build or migration procedure.
 3. Copy the built UF2 onto that drive and allow it to restart. Reconnect, sync the clock and confirm the node’s own identity, radio region/preset, contacts, channels and GPS setting. USB and Bluetooth clients should successively identify the same node. Let the first client disconnect before opening the second. [Heltec USB update instructions](https://github.com/HelTecAutomation/HeltecWiKi/blob/main/docs/devices/open-source-hardware/nrf52840-series/mesh-node-t1/Usage.md)
 
+For subsequent updates on the combined build, let the phone receive its queued messages and disconnect it in MeshCore. Open the local companion CLI over USB and send `usb update`. The T1 saves pending contact changes and opens the same USB update drive as the rear-button gesture. If it replies “Receive queued messages first”, reconnect the phone and receive them before retrying. Confirm the board ID and copy the new UF2 as above. This path was tested on a physical T1 running the combined v1.18.0 build.
+
 On a correctly identified T1, an application-only MeshCore update preserves the existing configuration area. The firmware reads the node name and keys on that device. Use the official MeshCore T1 companion application UF2 for rollback. Messages queued in RAM can be lost at restart.
 
 ## Following MeshCore releases
