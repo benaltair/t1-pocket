@@ -1,0 +1,62 @@
+diff --git a/variants/heltec_t1/T1CompanionPort.h b/variants/heltec_t1/T1CompanionPort.h
+--- a/variants/heltec_t1/T1CompanionPort.h
++++ b/variants/heltec_t1/T1CompanionPort.h
+@@ -17,6 +17,7 @@
+     ports[1] = &usb;
+   }
+ 
++  bool isUsbOwner() const { return owner == ports[1] && available(owner); }
+   bool isConnected() const override { return available(owner); }
+   bool isWriteBusy() const override { return isConnected() && owner->isWriteBusy(); }
+ 
+diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
+--- a/variants/heltec_t1/target.cpp
++++ b/variants/heltec_t1/target.cpp
+@@ -10,7 +10,15 @@
+ #ifdef T1_DUAL_COMPANION
+ // The framework's default 1200-baud gesture requests serial-only DFU.
+ // This board reliably enumerates its removable UF2 volume instead.
+-extern "C" void __wrap_enterSerialDfu(void) { enterUf2Dfu(); }
++#include <Adafruit_TinyUSB.h>
++void t1EnterUsbUpdate() {
++  // Give the host time to retire the application CDC device before the
++  // bootloader starts its short USB enumeration window.
++  TinyUSBDevice.detach();
++  delay(500);
++  enterUf2Dfu();
++}
++extern "C" void __wrap_enterSerialDfu(void) { t1EnterUsbUpdate(); }
+ #endif
+ 
+ T1Board board;
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -2,6 +2,9 @@
+ #ifdef T1_DUAL_COMPANION
+ #include "UITask.h"
+ extern UITask ui_task;
++#include "T1CompanionPort.h"
++extern T1CompanionPort interface_manager;
++extern void t1EnterUsbUpdate();
+ #endif
+ 
+ #include <Arduino.h> // needed for PlatformIO
+@@ -1134,7 +1137,16 @@
+ 
+     reply_buf[0] = 0;
+ #ifdef T1_DUAL_COMPANION
+-    if (strcmp(text, "screen wake") == 0) {
++    if (strcmp(text, "usb update") == 0) {
++      if (!interface_manager.isUsbOwner()) {
++        strcpy(reply_buf, "Connect via USB");
++      } else if (offline_queue_len) {
++        strcpy(reply_buf, "Receive queued messages first");
++      } else {
++        if (dirty_contacts_expiry) saveContacts();
++        t1EnterUsbUpdate();
++      }
++    } else if (strcmp(text, "screen wake") == 0) {
+       ui_task.wakeHomeScreen();
+       strcpy(reply_buf, "OK");
+     } else

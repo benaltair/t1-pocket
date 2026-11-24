@@ -1,0 +1,14 @@
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+index 9dcb9d0..b3ebfdd 100644
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -986,6 +986,9 @@ void MyMesh::begin() {
+ 
+   resetContacts();
+   _store->loadContacts(this);
++  // A T1 has no calendar RTC. A future-dated contact can otherwise block a phone sync.
++#ifndef HELTEC_T1
+   bootstrapRTCfromContacts();
++#endif
+   addChannel("Public", PUBLIC_GROUP_PSK); // pre-configure public channel
+   _store->loadChannels(this);

@@ -1,0 +1,4 @@
+__pycache__/
+builds/
+.DS_Store
+default-preset.txt

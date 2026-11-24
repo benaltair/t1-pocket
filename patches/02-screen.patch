@@ -1,0 +1,373 @@
+diff --git a/examples/companion_radio/ui-new/UITask.cpp b/examples/companion_radio/ui-new/UITask.cpp
+index bc25de7..a56af00 100644
+--- a/examples/companion_radio/ui-new/UITask.cpp
++++ b/examples/companion_radio/ui-new/UITask.cpp
+@@ -86,6 +86,9 @@ public:
+   }
+ };
+ 
++#ifdef T1_POCKET_UI
++#include "T1HomeScreen.h"
++#else
+ class HomeScreen : public UIScreen {
+   enum HomePage {
+     FIRST,
+@@ -627,6 +630,8 @@ public:
+   }
+ };
+ 
++#endif  // T1_POCKET_UI
++
+ #ifndef UI_MSG_PREVIEW_SIZE
+   #define UI_MSG_PREVIEW_SIZE 78
+ #endif
+@@ -756,7 +761,12 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
+   splash = new SplashScreen(this);
+   home = new HomeScreen(this, &rtc_clock, sensors, node_prefs);
+   msg_preview = new MsgPreviewScreen(this, &rtc_clock);
++#ifdef T1_POCKET_UI
++  setCurrScreen(home);
++  if (_display) _display->turnOff();
++#else
+   setCurrScreen(splash);
++#endif
+ }
+ 
+ void UITask::showAlert(const char* text, int duration_millis) {
+@@ -799,6 +809,7 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
+ 
+   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
+   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, from.name, text);
++#ifndef T1_POCKET_UI
+   setCurrScreen(msg_preview);
+ 
+   if (_display != NULL) {
+@@ -811,6 +822,7 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
+     }
+   }
+ 
++#endif
+   if (!hasConnection()) {
+     notify(UIEventType::contactMessage);
+   }
+@@ -819,6 +831,7 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
+ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) {
+   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
+   ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, channel_details.name, text);
++#ifndef T1_POCKET_UI
+   setCurrScreen(msg_preview);
+ 
+   if (_display != NULL) {
+@@ -831,6 +844,7 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
+     }
+   }
+ 
++#endif
+   if (!hasConnection()) {
+     notify(UIEventType::channelMessage);
+   }
+@@ -1084,6 +1098,10 @@ void UITask::loop() {
+ char UITask::checkDisplayOn(char c) {
+   if (_display != NULL) {
+     if (!_display->isOn()) {
++#ifdef T1_POCKET_UI
++      static_cast<HomeScreen*>(home)->resetPage();
++      setCurrScreen(home);
++#endif
+       _display->turnOn();   // turn display on and consume event
+       c = 0;
+     }
+@@ -1098,13 +1116,20 @@ char UITask::handleLongPress(char c) {
+     the_mesh.enterCLIRescue();
+     c = 0;   // consume event
+   }
++#ifdef T1_POCKET_UI
++  if (c && _display && !_display->isOn()) return checkDisplayOn(c);
++#endif
+   return c;
+ }
+ 
+ char UITask::handleDoubleClick(char c) {
+   MESH_DEBUG_PRINTLN("UITask: double-click triggered");
++#ifdef T1_POCKET_UI
++  return checkDisplayOn(c);
++#else
+   checkDisplayOn(c);
+   return c;
++#endif
+ }
+ 
+ char UITask::handleTripleClick(char c) {
+diff --git a/src/helpers/ui/ST7735Display.cpp b/src/helpers/ui/ST7735Display.cpp
+index 344f5b1..eaac343 100644
+--- a/src/helpers/ui/ST7735Display.cpp
++++ b/src/helpers/ui/ST7735Display.cpp
+@@ -417,6 +417,46 @@ bool ST7735Display::i2c_probe(TwoWire& wire, uint8_t addr) {
+   #define PIN_TFT_LEDA_CTL_ACTIVE  HIGH
+ #endif
+ 
++#ifdef T1_POCKET_UI
++#include <HardwarePWM.h>
++static HardwarePWM* backlightPWM = nullptr;
++static const uint32_t backlightOwner = 0x5431424c;
++
++static void turnOnDimBacklight() {
++  for (unsigned i=0; i<HWPWM_MODULE_NUM; ++i) {
++    HardwarePWM* pwm = HwPWMx[i];
++    if (!pwm->takeOwnership(backlightOwner)) continue;
++    if (pwm->addPin(PIN_TFT_LEDA_CTL)) {
++      backlightPWM = pwm;
++      pwm->setResolution(8);
++      pwm->writePin(PIN_TFT_LEDA_CTL, 64, true); // active-low, 25% duty
++      return;
++    }
++    pwm->releaseOwnership(backlightOwner);
++  }
++  digitalWrite(PIN_TFT_LEDA_CTL, PIN_TFT_LEDA_CTL_ACTIVE);
++}
++
++static void releaseBacklight() {
++  digitalWrite(PIN_TFT_LEDA_CTL, !PIN_TFT_LEDA_CTL_ACTIVE);
++  if (backlightPWM) {
++    backlightPWM->stop();
++    backlightPWM->removePin(PIN_TFT_LEDA_CTL);
++    backlightPWM->releaseOwnership(backlightOwner);
++    backlightPWM = nullptr;
++  }
++}
++
++ColorVal UIColor::window_bkg = ST77XX_BLACK;
++ColorVal UIColor::title_bkg = 0x4227;
++ColorVal UIColor::title_txt = 0xbcf0;
++ColorVal UIColor::primary_txt = 0xded8;
++ColorVal UIColor::secondary_txt = 0x9cf1;
++ColorVal UIColor::warning_txt = 0xe58d;
++ColorVal UIColor::popup_bkg = 0x2103;
++ColorVal UIColor::popup_txt = 0xded8;
++ColorVal UIColor::corp_blue = 0xbcf0;
++#else
+ // Color scheme
+ ColorVal UIColor::window_bkg = ST77XX_WHITE;
+ ColorVal UIColor::title_bkg = ST77XX_BLUE;
+@@ -428,12 +468,17 @@ ColorVal UIColor::popup_bkg = ST77XX_CYAN;
+ ColorVal UIColor::popup_txt = ST77XX_BLACK;
+ ColorVal UIColor::corp_blue = 0x001A;
+ 
++#endif
++
+ bool ST7735Display::begin() {
+   if (!sprite) {
+     // alloc offscreen canvas
+     sprite = new TFT_eSprite(&lcd);
+     if (sprite) {
+       if (sprite->createSprite(160, 80)) {
++#ifdef T1_POCKET_UI
++        sprite->setTextWrap(false);
++#endif
+         sprite->fillScreen(ST77XX_BLACK);
+         sprite->setTextColor(curr_color = ST77XX_WHITE);
+       } else {
+@@ -505,7 +550,11 @@ void ST7735Display::_resetAndInit() {
+     endFrame();
+     
+     // turn on backlight
++#ifdef T1_POCKET_UI
++    turnOnDimBacklight();
++#else
+     digitalWrite(PIN_TFT_LEDA_CTL, PIN_TFT_LEDA_CTL_ACTIVE);
++#endif
+ 
+ }
+ 
+@@ -527,7 +576,11 @@ void ST7735Display::turnOff() {
+ 
+     //digitalWrite(PIN_TFT_RST, LOW);
+     // Now turn off the backlight
++#ifdef T1_POCKET_UI
++    releaseBacklight();
++#else
+     digitalWrite(PIN_TFT_LEDA_CTL, !PIN_TFT_LEDA_CTL_ACTIVE);
++#endif
+     _isOn = false;
+ 
+     if (_peripher_power) _peripher_power->release();
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+new file mode 100644
+index 0000000..a96af6b
+--- /dev/null
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -0,0 +1,160 @@
++#pragma once
++
++// Included by ui-new after the board, display, mesh and UITask definitions.
++class HomeScreen : public UIScreen {
++  enum Page { Home, GPS, Hibernate, Pairing, Count };
++  UITask* task;
++  NodePrefs* prefs;
++  Page page = Home;
++  bool powerOffAfterRelease = false;
++
++  static bool validBattery(unsigned mv) {
++    return mv >= 2500 && mv <= 4350;
++  }
++
++  static void drawBattery(DisplayDriver& d, unsigned mv, bool usb) {
++    // Coarse voltage bands for the T1's single lithium cell under load.
++    // Charging raises terminal voltage, so show the plug while on USB.
++    d.setColor(UIColor::secondary_txt);
++    d.fillRect(105, 3, 18, 1);
++    d.fillRect(105, 10, 18, 1);
++    d.fillRect(105, 4, 1, 6);
++    d.fillRect(122, 4, 1, 6);
++    d.fillRect(123, 5, 2, 4);
++    if (usb) {
++      d.fillRect(111, 4, 1, 2);
++      d.fillRect(115, 4, 1, 2);
++      d.fillRect(110, 6, 7, 2);
++      d.fillRect(113, 8, 1, 2);
++    } else if (validBattery(mv)) {
++      static const unsigned levels[] = {3450, 3650, 3800, 4000};
++      d.setColor(mv < levels[1] ? UIColor::warning_txt : UIColor::title_txt);
++      for (int bar=0; bar<4 && mv>=levels[bar]; ++bar)
++        d.fillRect(107 + 4*bar, 5, 2, 4);
++    }
++  }
++
++public:
++  HomeScreen(UITask* task, mesh::RTCClock*, SensorManager*, NodePrefs* prefs)
++    : task(task), prefs(prefs) {}
++
++  void resetPage() { page = Home; }
++
++  int render(DisplayDriver& d) override {
++    const bool gps = task->getGPSState();
++    const bool usb = board.isExternalPowered();
++    const unsigned mv = task->getBattMilliVolts();
++    const char* status = gps ? (usb ? "GPS  USB" : "GPS") : (usb ? "USB" : "");
++    d.setTextSize(1);
++    d.setColor(UIColor::secondary_txt);
++    d.drawTextRightAlign(101, 3, status);
++    drawBattery(d, mv, usb);
++    char name[sizeof(prefs->node_name)];
++    d.translateUTF8ToBlocks(name, prefs->node_name, sizeof(name));
++    d.setColor(UIColor::title_txt);
++    d.drawTextEllipsized(3, 3, 94 - d.getTextWidth(status), name);
++    d.setColor(UIColor::title_bkg);
++    d.fillRect(3, 13, 122, 1);
++
++    const char* hint;
++    char detail[32];
++    d.setColor(UIColor::primary_txt);
++    if (page == Home) {
++      if (rtc_clock.isSynced()) {
++#ifdef T1_PACIFIC_TIME
++        const uint32_t localTime = rtc_clock.getCurrentTime() - 7UL * 3600;
++        const char* zone = "PCT";
++#else
++        const uint32_t localTime = rtc_clock.getCurrentTime();
++        const char* zone = "UTC";
++#endif
++        char hhmm[8];
++        snprintf(hhmm, sizeof(hhmm), "%02u:%02u", unsigned((localTime/3600)%24), unsigned((localTime/60)%60));
++        d.setTextSize(2);
++        d.drawTextLeftAlign(3, 19, hhmm);
++        d.setTextSize(1);
++        d.drawTextLeftAlign(55, 24, zone);
++      } else {
++        d.setColor(UIColor::warning_txt);
++        d.drawTextLeftAlign(3, 21, "Sync clock with phone");
++      }
++      const int count = task->getMsgCount();
++      snprintf(detail, sizeof(detail), "%d queued", count);
++      d.setTextSize(1);
++      d.setColor(UIColor::secondary_txt);
++      d.drawTextLeftAlign(3, 39, detail);
++      if (validBattery(mv))
++        snprintf(detail, sizeof(detail), "%u.%02u V", mv/1000, (mv%1000)/10);
++      else
++        snprintf(detail, sizeof(detail), "-- V");
++      d.drawTextRightAlign(125, 39, detail);
++      hint = "Hold to send advert";
++    } else if (page == GPS) {
++      d.setTextSize(2);
++      d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
++      d.setTextSize(1);
++      d.setColor(UIColor::secondary_txt);
++      d.drawTextLeftAlign(3, 39, gps ? "Time sync on valid fix" : "Phone can sync time");
++      hint = gps ? "Hold to turn GPS off" : "Hold to turn GPS on";
++    } else if (page == Hibernate) {
++      d.setTextSize(2);
++      d.drawTextLeftAlign(3, 19, "Hibernate");
++      d.setTextSize(1);
++      d.setColor(UIColor::secondary_txt);
++      d.drawTextLeftAlign(3, 39, "Radio will power down");
++      hint = "Hold to hibernate";
++    } else {
++      const uint32_t pin = the_mesh.getBLEPin();
++      if (pin) {
++        snprintf(detail, sizeof(detail), "%06lu", static_cast<unsigned long>(pin));
++        d.setTextSize(2);
++        d.drawTextLeftAlign(3, 19, detail);
++      } else {
++        d.drawTextLeftAlign(3, 22, "PIN unavailable");
++      }
++      d.setTextSize(1);
++      d.setColor(UIColor::secondary_txt);
++      d.drawTextLeftAlign(3, 39, "Bluetooth pairing PIN");
++      hint = "Tap for Home";
++    }
++    d.setColor(UIColor::title_bkg);
++    d.fillRect(3, 49, 122, 1);
++    d.setColor(UIColor::title_txt);
++    d.drawTextLeftAlign(3, 54, hint);
++    for (int i=0; i<Count; ++i) {
++      d.setColor(i == page ? UIColor::title_txt : UIColor::title_bkg);
++      d.fillRect(110+i*5, 56, 3, 2);
++    }
++    return 1000;
++  }
++
++  bool handleInput(char c) override {
++    if (c == KEY_NEXT || c == KEY_PREV) {
++      page = Page((int(page) + (c == KEY_NEXT ? 1 : Count-1)) % Count);
++      return true;
++    }
++    if (c != KEY_ENTER) return false;
++    if (page == Home) {
++      if (!rtc_clock.isSynced()) task->showAlert("Sync clock with phone", 1600);
++      else {
++#ifdef T1_FLOOD_ADVERT
++        const bool flood = true;
++#else
++        const bool flood = false;
++#endif
++        task->showAlert(the_mesh.advert(flood) ? "Advert queued" : "Advert queue full", 1200);
++      }
++    } else if (page == GPS) {
++      task->toggleGPS();
++    } else if (page == Hibernate) {
++      powerOffAfterRelease = true;
++    } else {
++      return false;
++    }
++    return true;
++  }
++
++  void poll() override {
++    if (powerOffAfterRelease && !task->isButtonPressed()) task->shutdown();
++  }
++};
+diff --git a/variants/heltec_t1/platformio.ini b/variants/heltec_t1/platformio.ini
+index 22e0a5e..c3672db 100644
+--- a/variants/heltec_t1/platformio.ini
++++ b/variants/heltec_t1/platformio.ini
+@@ -64,6 +64,9 @@ build_flags =
+   ${Heltec_t1.build_flags}
+   -I examples/companion_radio/ui-new
+   -D T1_COMPANION_CLOCK
++  -D T1_POCKET_UI
++  -D UI_DISCOVER_SCREEN=0
++  -D AUTO_OFF_MILLIS=10000
+   -D MAX_CONTACTS=350
+   -D MAX_GROUP_CHANNELS=40
+   -D BLE_PIN_CODE=123456

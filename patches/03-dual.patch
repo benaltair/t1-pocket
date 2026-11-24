@@ -1,0 +1,191 @@
+diff --git a/examples/companion_radio/main.cpp b/examples/companion_radio/main.cpp
+--- a/examples/companion_radio/main.cpp
++++ b/examples/companion_radio/main.cpp
+@@ -14,7 +14,12 @@
+ 
+ // interface manager
+ #include <helpers/MultiSerialInterface.h>
+-MultiSerialInterface interface_manager;
++#ifdef T1_DUAL_COMPANION
++  #include "T1CompanionPort.h"
++  T1CompanionPort interface_manager;
++#else
++  MultiSerialInterface interface_manager;
++#endif
+ 
+ // include bluetooth interface
+ #if defined(BLE_PIN_CODE)
+@@ -67,7 +72,20 @@
+ // include usb interface
+ #if defined(ENABLE_USB_INTERFACE)
+   #include <helpers/ArduinoSerialInterface.h>
+-  ArduinoSerialInterface usb_serial_interface;
++  #ifdef T1_DUAL_COMPANION
++    class T1UsbPort : public ArduinoSerialInterface {
++      bool previously_open = false;
++    public:
++      bool isConnected() const override { return isEnabled() && Serial.dtr(); }
++      void loop() override {
++        bool open = isConnected();
++        if (previously_open && !open && isEnabled()) enable();  // discard a partial frame
++        previously_open = open;
++      }
++    } usb_serial_interface;
++  #else
++    ArduinoSerialInterface usb_serial_interface;
++  #endif
+ #endif
+ 
+ // include ethernet interface
+@@ -274,6 +292,9 @@
+   interface_manager.addInterface(InterfaceType::HardwareSerial, &hardware_serial_interface);
+ #endif
+ 
++#ifdef T1_DUAL_COMPANION
++  interface_manager.bind(bluetooth_interface, usb_serial_interface);
++#endif
+   the_mesh.startInterface(interface_manager);
+   sensors.begin();
+ 
+diff --git a/variants/heltec_t1/T1CompanionPort.h b/variants/heltec_t1/T1CompanionPort.h
+new file mode 100644
+--- /dev/null
++++ b/variants/heltec_t1/T1CompanionPort.h
+@@ -0,0 +1,51 @@
++#pragma once
++#include <helpers/MultiSerialInterface.h>
++
++// One client owns a companion session. Connecting a charger or opening a
++// serial monitor never claims a session, and replies go only to its owner.
++class T1CompanionPort : public MultiSerialInterface {
++  BaseSerialInterface* ports[2] = {};
++  BaseSerialInterface* owner = nullptr;
++
++  bool available(BaseSerialInterface* port) const {
++    return port && port->isEnabled() && port->isConnected();
++  }
++
++public:
++  void bind(BaseSerialInterface& bluetooth, BaseSerialInterface& usb) {
++    ports[0] = &bluetooth;
++    ports[1] = &usb;
++  }
++
++  bool isConnected() const override { return available(owner); }
++  bool isWriteBusy() const override { return isConnected() && owner->isWriteBusy(); }
++
++  size_t writeFrame(const uint8_t src[], size_t len) override {
++    return isConnected() ? owner->writeFrame(src, len) : 0;
++  }
++
++  void loop() override {
++    MultiSerialInterface::loop();
++    if (!isConnected()) owner = nullptr;
++  }
++
++  void disable() override {
++    owner = nullptr;
++    MultiSerialInterface::disable();
++  }
++
++  size_t checkRecvFrame(uint8_t dest[]) override {
++    if (!isConnected()) owner = nullptr;
++    for (auto* port : ports) {
++      if (!available(port)) continue;
++      // Discard complete requests from the waiting client during an active
++      // session. Its requests must not execute later after a handoff.
++      size_t len = port->checkRecvFrame(dest);
++      if (len && (!owner || port == owner)) {
++        owner = port;
++        return len;
++      }
++    }
++    return 0;
++  }
++};
+diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
+--- a/variants/heltec_t1/target.cpp
++++ b/variants/heltec_t1/target.cpp
+@@ -5,6 +5,12 @@
+ 
+ #ifdef ENV_INCLUDE_GPS
+ #include <helpers/sensors/MicroNMEALocationProvider.h>
++#endif
++
++#ifdef T1_DUAL_COMPANION
++// The framework's default 1200-baud gesture requests serial-only DFU.
++// This board reliably enumerates its removable UF2 volume instead.
++extern "C" void __wrap_enterSerialDfu(void) { enterUf2Dfu(); }
+ #endif
+ 
+ T1Board board;
+diff --git a/variants/heltec_t1/platformio.ini b/variants/heltec_t1/platformio.ini
+--- a/variants/heltec_t1/platformio.ini
++++ b/variants/heltec_t1/platformio.ini
+@@ -65,6 +65,9 @@
+   -I examples/companion_radio/ui-new
+   -D T1_COMPANION_CLOCK
+   -D T1_POCKET_UI
++  -D T1_DUAL_COMPANION
++  -D ENABLE_USB_INTERFACE
++  -Wl,--wrap=enterSerialDfu
+   -D UI_DISCOVER_SCREEN=0
+   -D AUTO_OFF_MILLIS=10000
+   -D MAX_CONTACTS=350
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -1,4 +1,8 @@
+ #include "MyMesh.h"
++#ifdef T1_DUAL_COMPANION
++#include "UITask.h"
++extern UITask ui_task;
++#endif
+ 
+ #include <Arduino.h> // needed for PlatformIO
+ #ifdef ENABLE_WIFI_INTERFACE
+@@ -1124,6 +1128,12 @@
+     text[tlen] = 0; // ensure null
+ 
+     reply_buf[0] = 0;
++#ifdef T1_DUAL_COMPANION
++    if (strcmp(text, "screen wake") == 0) {
++      ui_task.wakeHomeScreen();
++      strcpy(reply_buf, "OK");
++    } else
++#endif
+     if (!handleCommand(text, 0, reply_buf)) {
+       strcat(reply_buf, "Unknown command");   // reply_buf may have cmd prefix from 'text'
+     }
+diff --git a/examples/companion_radio/ui-new/UITask.h b/examples/companion_radio/ui-new/UITask.h
+--- a/examples/companion_radio/ui-new/UITask.h
++++ b/examples/companion_radio/ui-new/UITask.h
+@@ -97,6 +97,9 @@
+   void begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* node_prefs);
+ 
+   void gotoHomeScreen() { setCurrScreen(home); }
++#ifdef T1_DUAL_COMPANION
++  void wakeHomeScreen();
++#endif
+   void showAlert(const char* text, int duration_millis);
+   int  getMsgCount() const { return _msgcount; }
+   bool hasDisplay() const { return _display != NULL; }
+diff --git a/examples/companion_radio/ui-new/UITask.cpp b/examples/companion_radio/ui-new/UITask.cpp
+--- a/examples/companion_radio/ui-new/UITask.cpp
++++ b/examples/companion_radio/ui-new/UITask.cpp
+@@ -1095,6 +1095,15 @@
+ #endif
+ }
+ 
++#ifdef T1_DUAL_COMPANION
++void UITask::wakeHomeScreen() {
++  if (!_display || !home) return;
++  static_cast<HomeScreen*>(home)->resetPage();
++  setCurrScreen(home);
++  checkDisplayOn(0);
++}
++#endif
++
+ char UITask::checkDisplayOn(char c) {
+   if (_display != NULL) {
+     if (!_display->isOn()) {

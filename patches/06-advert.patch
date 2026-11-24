@@ -1,0 +1,64 @@
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+index 578f05b..cba9cdb 100644
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -1330,21 +1330,7 @@ void MyMesh::handleCmdFrame(size_t len) {
+       writeErrFrame(ERR_CODE_ILLEGAL_ARG);
+     }
+   } else if (cmd_frame[0] == CMD_SEND_SELF_ADVERT) {
+-    mesh::Packet* pkt;
+-    if (_prefs.advert_loc_policy == ADVERT_LOC_NONE) {
+-      pkt = createSelfAdvert(_prefs.node_name);
+-    } else {
+-      pkt = createSelfAdvert(_prefs.node_name, sensors.node_lat, sensors.node_lon);
+-    }
+-    if (pkt) {
+-      if (len >= 2 && cmd_frame[1] == 1) { // optional param (1 = flood, 0 = zero hop)
+-        unsigned long delay_millis = 0;
+-        TransportKey default_scope;
+-        memcpy(&default_scope.key, _prefs.default_scope_key, sizeof(default_scope.key));
+-        sendFloodScoped(default_scope, pkt, delay_millis);
+-      } else {
+-        sendZeroHop(pkt);
+-      }
++    if (advert(len >= 2 && cmd_frame[1] == 1)) {
+       writeOKFrame();
+     } else {
+       writeErrFrame(ERR_CODE_TABLE_FULL);
+@@ -2471,7 +2457,7 @@ void MyMesh::loop() {
+   }
+ }
+ 
+-bool MyMesh::advert() {
++bool MyMesh::advert(bool flood) {
+   mesh::Packet* pkt;
+   if (_prefs.advert_loc_policy == ADVERT_LOC_NONE) {
+     pkt = createSelfAdvert(_prefs.node_name);
+@@ -2479,7 +2465,13 @@ bool MyMesh::advert() {
+     pkt = createSelfAdvert(_prefs.node_name, sensors.node_lat, sensors.node_lon);
+   }
+   if (pkt) {
+-    sendZeroHop(pkt);
++    if (flood) {
++      TransportKey scope;
++      memcpy(&scope.key, _prefs.default_scope_key, sizeof(scope.key));
++      sendFloodScoped(scope, pkt, 0);
++    } else {
++      sendZeroHop(pkt);
++    }
+     return true;
+   } else {
+     return false;
+diff --git a/examples/companion_radio/MyMesh.h b/examples/companion_radio/MyMesh.h
+index 944790d..eabd540 100644
+--- a/examples/companion_radio/MyMesh.h
++++ b/examples/companion_radio/MyMesh.h
+@@ -121,7 +121,7 @@ public:
+ 
+   void loop();
+   void handleCmdFrame(size_t len);
+-  bool advert();
++  bool advert(bool flood = false);
+   void enterCLIRescue();
+ 
+   int  getRecentlyHeard(AdvertPath dest[], int max_num);

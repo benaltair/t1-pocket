@@ -1,0 +1,197 @@
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+index f32ea67..57e5664 100644
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -998,7 +998,9 @@ void MyMesh::begin() {
+ 
+   resetContacts();
+   _store->loadContacts(this);
++#ifndef T1_COMPANION_CLOCK
+   bootstrapRTCfromContacts();
++#endif
+   addChannel("Public", PUBLIC_GROUP_PSK); // pre-configure public channel
+   _store->loadChannels(this);
+ 
+@@ -1287,8 +1289,11 @@ void MyMesh::handleCmdFrame(size_t len) {
+   } else if (cmd_frame[0] == CMD_SET_DEVICE_TIME && len >= 5) {
+     uint32_t secs;
+     memcpy(&secs, &cmd_frame[1], 4);
+-    uint32_t curr = getRTCClock()->getCurrentTime();
+-    if (secs >= curr) {
++#ifdef T1_COMPANION_CLOCK
++    if (T1CompanionClock::plausible(secs)) {
++#else
++    if (secs >= getRTCClock()->getCurrentTime()) {
++#endif
+       getRTCClock()->setCurrentTime(secs);
+       writeOKFrame();
+     } else {
+diff --git a/src/MeshCore.h b/src/MeshCore.h
+index b9cfb41..59c81cf 100644
+--- a/src/MeshCore.h
++++ b/src/MeshCore.h
+@@ -99,6 +99,7 @@ class RTCClock {
+   uint32_t last_unique;
+ protected:
+   RTCClock() { last_unique = 0; }
++  void resetUniqueTime() { last_unique = 0; }
+ 
+ public:
+   /**
+diff --git a/src/helpers/sensors/MicroNMEALocationProvider.h b/src/helpers/sensors/MicroNMEALocationProvider.h
+index 37ef576..f1aabdc 100644
+--- a/src/helpers/sensors/MicroNMEALocationProvider.h
++++ b/src/helpers/sensors/MicroNMEALocationProvider.h
+@@ -49,6 +49,10 @@ class MicroNMEALocationProvider : public LocationProvider {
+     int _pin_en;
+     unsigned long next_check = 0;
+     long time_valid = 0;
++#ifdef T1_COMPANION_CLOCK
++    bool have_dated_fix = false;
++    uint32_t dated_fix_ms = 0;
++#endif
+     unsigned long _last_time_sync = 0;
+     static const unsigned long TIME_SYNC_INTERVAL = 1800000; // Re-sync every 30 minutes
+ 
+@@ -138,6 +142,9 @@ public :
+ 
+     void stop() override {
+         _stop_calls++;
++#ifdef T1_COMPANION_CLOCK
++        have_dated_fix = false;
++#endif
+         if (_pin_en != -1) {
+             digitalWrite(_pin_en, !GPS_EN_ACTIVE);
+         }
+@@ -225,6 +232,12 @@ public :
+                     const char* message_id = nmea.getMessageID();
+                     if (parsed && isValid() &&
+                         (strcmp(message_id, "GGA") == 0 || strcmp(message_id, "RMC") == 0)) {
++#ifdef T1_COMPANION_CLOCK
++                        if (strcmp(message_id, "RMC") == 0 && nmea.getYear() >= 2025 && nmea.getYear() <= 2050) {
++                            dated_fix_ms = millis();
++                            have_dated_fix = true;
++                        }
++#endif
+                         _last_fix_ms = millis();
+                         _fix_seen = true;
+                     }
+@@ -243,7 +256,11 @@ public :
+                 _time_sync_needed = true;
+             }
+             if (_time_sync_needed && time_valid > 2) {
+-                if (_clock != NULL) {
++                if (_clock != NULL
++#ifdef T1_COMPANION_CLOCK
++                    && have_dated_fix && ageMs(dated_fix_ms) < 3000
++#endif
++                ) {
+                     _clock->setCurrentTime(getTimestamp());
+                     _time_sync_needed = false;
+                     _last_time_sync = millis();
+diff --git a/variants/heltec_t1/T1CompanionClock.h b/variants/heltec_t1/T1CompanionClock.h
+new file mode 100644
+index 0000000..21ef9e8
+--- /dev/null
++++ b/variants/heltec_t1/T1CompanionClock.h
+@@ -0,0 +1,44 @@
++#pragma once
++
++#include <MeshCore.h>
++#include <Arduino.h>
++
++// The T1 has no battery-backed RTC. Only a local sync or a GPS fix can
++// establish UTC after the processor starts. Never use contacts as a clock.
++class T1CompanionClock : public mesh::RTCClock {
++  uint32_t seconds = 1715770351;  // MeshCore's unsynchronised baseline
++  uint32_t previousTick = 0;
++  uint32_t fraction = 0;
++  bool synced = false;
++
++public:
++  static bool plausible(uint32_t utc) {
++    return utc >= 1735689600UL && utc < 2556144000UL; // 2025 through 2050 UTC
++  }
++
++  bool isSynced() const { return synced && plausible(seconds); }
++  uint32_t getCurrentTime() override { return seconds; }
++
++  void setCurrentTime(uint32_t utc) override {
++    if (!plausible(utc)) return;
++    // A grossly incorrect previous clock must not keep generating adverts or
++    // requests with timestamps years ahead after the local time is repaired.
++    if (seconds > utc && seconds - utc > 86400UL) resetUniqueTime();
++    seconds = utc;
++    previousTick = xTaskGetTickCount();
++    fraction = 0;
++    synced = true;
++  }
++
++  void tick() override {
++    static_assert(sizeof(TickType_t) == 4, "Review T1 RTC for a new RTOS tick width");
++    const uint32_t now = xTaskGetTickCount();
++    const uint32_t elapsed = now - previousTick;
++    previousTick = now;
++    // millis() wraps early on this 1024 Hz core. Subtract the raw ticks first.
++    seconds += elapsed / configTICK_RATE_HZ;
++    fraction += elapsed % configTICK_RATE_HZ;
++    seconds += fraction / configTICK_RATE_HZ;
++    fraction %= configTICK_RATE_HZ;
++  }
++};
+diff --git a/variants/heltec_t1/platformio.ini b/variants/heltec_t1/platformio.ini
+index 28ed67e..22e0a5e 100644
+--- a/variants/heltec_t1/platformio.ini
++++ b/variants/heltec_t1/platformio.ini
+@@ -63,6 +63,7 @@ board_upload.maximum_size = 712704
+ build_flags =
+   ${Heltec_t1.build_flags}
+   -I examples/companion_radio/ui-new
++  -D T1_COMPANION_CLOCK
+   -D MAX_CONTACTS=350
+   -D MAX_GROUP_CHANNELS=40
+   -D BLE_PIN_CODE=123456
+diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
+index af77158..5adc69a 100644
+--- a/variants/heltec_t1/target.cpp
++++ b/variants/heltec_t1/target.cpp
+@@ -17,8 +17,12 @@ RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BU
+ 
+ WRAPPER_CLASS radio_driver(radio, board);
+ 
++#ifdef T1_COMPANION_CLOCK
++T1CompanionClock rtc_clock;
++#else
+ VolatileRTCClock fallback_clock;
+ AutoDiscoverRTCClock rtc_clock(fallback_clock);
++#endif
+ 
+ #if ENV_INCLUDE_GPS
+ MicroNMEALocationProvider nmea = MicroNMEALocationProvider(Serial1, &rtc_clock, GPS_RESET, GPS_EN, &board.periph_power);
+@@ -33,7 +37,9 @@ MomentaryButton user_btn(PIN_USER_BTN, 1000, true);
+ #endif
+ 
+ bool radio_init() {
++#ifndef T1_COMPANION_CLOCK
+   rtc_clock.begin(Wire);
++#endif
+ 
+ #if defined(P_LORA_SCLK)
+   return radio.std_init(&SPI);
+diff --git a/variants/heltec_t1/target.h b/variants/heltec_t1/target.h
+index ffd9434..0ac32a0 100644
+--- a/variants/heltec_t1/target.h
++++ b/variants/heltec_t1/target.h
+@@ -18,7 +18,12 @@
+ 
+ extern T1Board board;
+ extern WRAPPER_CLASS radio_driver;
++#ifdef T1_COMPANION_CLOCK
++#include "T1CompanionClock.h"
++extern T1CompanionClock rtc_clock;
++#else
+ extern AutoDiscoverRTCClock rtc_clock;
++#endif
+ extern EnvironmentSensorManager sensors;
+ 
+ #ifdef DISPLAY_CLASS

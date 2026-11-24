@@ -1,0 +1,55 @@
+diff --git a/variants/heltec_t1/T1CompanionClock.h b/variants/heltec_t1/T1CompanionClock.h
+--- a/variants/heltec_t1/T1CompanionClock.h
++++ b/variants/heltec_t1/T1CompanionClock.h
+@@ -14,6 +14,15 @@
+ public:
+   static bool plausible(uint32_t utc) {
+     return utc >= 1735689600UL && utc < 2556144000UL; // 2025 through 2050 UTC
++  }
++
++  // Keep legacy flash records intact. A future modification time is historical
++  // data, included on a full refresh but never a high-water mark for new edits.
++  uint32_t contactTimeForClient(uint32_t stored) const {
++    return stored > seconds || stored >= 2556144000UL ? 1 : stored;
++  }
++  uint32_t contactCursorFromClient(uint32_t since) const {
++    return since > seconds || since >= 2556144000UL ? 0 : since;
+   }
+ 
+   bool isSynced() const { return synced && plausible(seconds); }
+diff --git a/examples/companion_radio/MyMesh.cpp b/examples/companion_radio/MyMesh.cpp
+--- a/examples/companion_radio/MyMesh.cpp
++++ b/examples/companion_radio/MyMesh.cpp
+@@ -186,7 +186,12 @@
+   i += 4;
+   memcpy(&out_frame[i], &contact.gps_lon, 4);
+   i += 4;
++#ifdef T1_DUAL_COMPANION
++  const uint32_t client_lastmod = rtc_clock.contactTimeForClient(contact.lastmod);
++  memcpy(&out_frame[i], &client_lastmod, 4);
++#else
+   memcpy(&out_frame[i], &contact.lastmod, 4);
++#endif
+   i += 4;
+   _serial->writeFrame(out_frame, i);
+ }
+@@ -1243,6 +1248,9 @@
+     } else {
+       if (len >= 5) { // has optional 'since' param
+         memcpy(&_iter_filter_since, &cmd_frame[1], 4);
++#ifdef T1_DUAL_COMPANION
++        _iter_filter_since = rtc_clock.contactCursorFromClient(_iter_filter_since);
++#endif
+       } else {
+         _iter_filter_since = 0;
+       }
+@@ -2399,6 +2407,9 @@
+   ) {
+     ContactInfo contact;
+     if (_iter.hasNext(this, contact)) {
++#ifdef T1_DUAL_COMPANION
++      contact.lastmod = rtc_clock.contactTimeForClient(contact.lastmod);
++#endif
+       if (contact.lastmod > _iter_filter_since) { // apply the 'since' filter
+         writeContactRespFrame(RESP_CODE_CONTACT, contact);
+         if (contact.lastmod > _most_recent_lastmod) {
