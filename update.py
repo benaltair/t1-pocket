@@ -34,7 +34,7 @@ def apply_and_test(repo, profile, flags):
     for patch in patches:
         if profile == "clock" and patch.name != "01-clock.patch":
             continue
-        if profile == "pocket" and patch.name not in ("01-clock.patch", "02-screen.patch", "06-advert.patch"):
+        if profile == "pocket" and patch.name not in ("01-clock.patch", "02-screen.patch", "06-advert.patch", "07-pocket-controls.patch"):
             continue
         run("git", "apply", "--check", patch, cwd=repo)
         run("git", "apply", patch, cwd=repo)
@@ -45,6 +45,9 @@ def apply_and_test(repo, profile, flags):
         run("c++","-std=c++11","-funsigned-char",*flags,"-I",KIT/"tests","-I",repo/"src","-I",repo/"variants/heltec_t1",
             KIT/"tests/screen.cpp","-o",repo/"screen-test",cwd=repo)
         run(repo/"screen-test",stdout=subprocess.DEVNULL)
+        run("c++", "-std=c++11", "-I", repo/"variants/heltec_t1",
+            KIT/"tests/buttons.cpp", "-o", repo/"buttons-test", cwd=repo)
+        run(repo/"buttons-test")
     if profile == "dual":
         run("c++", "-std=c++11", "-I", KIT/"tests", "-I", repo/"src", "-I", repo/"variants/heltec_t1",
             KIT/"tests/ports.cpp", "-o", repo/"port-test", cwd=repo)
@@ -73,8 +76,8 @@ def main():
     if args.preset not in ("community", "nearby-pacific"):
         parser.error("Unknown preset")
     personal = args.preset == "nearby-pacific"
-    suffix = ({"clock":"clock1","pocket":"pocket4","dual":"dual5"} if personal else
-              {"clock":"clock1","pocket":"ble1","dual":"share1"})[args.profile]
+    suffix = ({"clock":"clock1","pocket":"pocket5","dual":"dual6"} if personal else
+              {"clock":"clock1","pocket":"ble2","dual":"share2"})[args.profile]
     flags = [] if args.profile=="clock" else ["-DT1_PACIFIC_TIME" if personal else "-DT1_FLOOD_ADVERT"]
     version = f"{tag.removeprefix('companion-')}-t1{suffix}"
     if len(version)>19: raise ValueError("Version exceeds companion wire field")
@@ -90,7 +93,7 @@ def main():
             print(json.dumps(dict(tag=tag,commit=commit),indent=2))
             return
         apply_and_test(repo,args.profile,flags)
-        print(f"{tag} {commit} | {args.profile} patches and clock tests passed",flush=True)
+        print(f"{tag} {commit} | {args.profile} patches and host tests passed",flush=True)
         if args.check_only: return
         pio=shutil.which("pio") or shutil.which("platformio")
         if not pio: raise SystemExit("Install PlatformIO Core and make pio available on PATH")

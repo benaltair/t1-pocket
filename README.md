@@ -4,7 +4,9 @@ An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with 
 
 ## On the node
 
-Tap the user button to wake Home. Single taps advance through Home, GPS, Hibernate and Pairing. Double-tap to go back. Hold on Home to send one advert after clock sync. Hold on GPS to switch the receiver, or hold and release on Hibernate to power down. Pairing displays the current Bluetooth PIN. The dim screen goes dark after ten seconds, including on USB. MeshCore’s rescue hold takes precedence in the first eight seconds after boot.
+Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync, GPS switches the receiver on or off, and Hibernate powers down after release. The screen sleeps after ten seconds of inactivity, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+
+When Bluetooth is available and a phone is disconnected, the first button wake shows the six-digit pairing PIN. Tap either button to dismiss it. Later wakes open Home. To see the PIN again, tap the lower button from Home. As soon as a Bluetooth connection is secured, the PIN disappears and both buttons skip the Pairing page. Disconnecting leaves the screen asleep if it was asleep. USB charging or a wired session alone does not hide the PIN.
 
 Each restart asks for a phone or computer time sync. When the owner has enabled GPS, a fresh dated fix can also set time. The firmware uses the local companion’s clock-sync command and accepts corrections backwards. Mesh timestamps use UTC in both presets.
 
@@ -35,7 +37,7 @@ On a correctly identified T1, an application-only MeshCore update preserves the 
 
 ## Following MeshCore releases
 
-`upstream.json` pins the reviewed release. To test the latest stable release on a computer, run `python3 update.py --latest --check-only` and then `python3 update.py --latest --out builds`. Host checks exercise clock arithmetic, screen behaviour and companion-port ownership. Full builds cross-check the UF2 pages against the Intel HEX, the Nordic application package against the UF2, and the combined build’s USB-update entry point against its ELF.
+`upstream.json` pins the reviewed release. To test the latest stable release on a computer, run `python3 update.py --latest --check-only` and then `python3 update.py --latest --out builds`. Host checks exercise clock arithmetic, button timing, pairing visibility, screen navigation and companion-port ownership. Full builds cross-check the UF2 pages against the Intel HEX, the Nordic application package against the UF2, and the combined build’s USB-update entry point against its ELF.
 
 The included GitHub Actions workflow checks for a new stable companion tag daily and on manual dispatch. A new tag triggers five builds covering the supported profiles and presets. A separate job opens a draft PR that updates the pinned tag and commit. Its description links to the test run and records success or failure. Conflicts stay visible for a maintainer to port and retest. Pull requests run the checks again when a contributor pushes changes. Review and merge on the repository’s default branch after a T1 hardware check.
 

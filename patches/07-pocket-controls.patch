@@ -1,0 +1,233 @@
+diff --git a/examples/companion_radio/ui-new/UITask.cpp b/examples/companion_radio/ui-new/UITask.cpp
+index 9c38324..4a29e88 100644
+--- a/examples/companion_radio/ui-new/UITask.cpp
++++ b/examples/companion_radio/ui-new/UITask.cpp
+@@ -88,5 +88,9 @@ public:
+ 
+ #ifdef T1_POCKET_UI
++#include <helpers/nrf52/SerialBLEInterface.h>
++extern SerialBLEInterface bluetooth_interface;
+ #include "T1HomeScreen.h"
++#include "T1PocketButtons.h"
++static T1PocketButtons pocketButtons;
+ #else
+ class HomeScreen : public UIScreen {
+@@ -733,5 +737,8 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
+   _auto_off = millis() + AUTO_OFF_MILLIS;
+ 
+-#if defined(PIN_USER_BTN)
++#if defined(T1_POCKET_UI)
++  pinMode(PIN_BUTTON1, INPUT);
++  pinMode(PIN_BUTTON2, INPUT);
++#elif defined(PIN_USER_BTN)
+   user_btn.begin();
+ #endif
+@@ -928,5 +935,7 @@ void UITask::shutdown(bool restart){
+ 
+ bool UITask::isButtonPressed() const {
+-#ifdef PIN_USER_BTN
++#ifdef T1_POCKET_UI
++  return pocketButtons.isPressed();
++#elif defined(PIN_USER_BTN)
+   return user_btn.isPressed();
+ #else
+@@ -937,5 +946,19 @@ bool UITask::isButtonPressed() const {
+ void UITask::loop() {
+   char c = 0;
+-#if UI_HAS_JOYSTICK
++#ifdef T1_POCKET_UI
++  if (static_cast<HomeScreen*>(home)->updatePairingState()) {
++    pocketButtons.cancelUntilRelease();
++    _next_refresh = 0;
++  }
++  const int upper = digitalRead(PIN_BUTTON1) == LOW ? T1PocketButtons::Upper : 0;
++  const int lower = digitalRead(PIN_BUTTON2) == LOW ? T1PocketButtons::Lower : 0;
++  switch (pocketButtons.poll(T1PocketButtons::Keys(upper | lower), millis())) {
++    case T1PocketButtons::Next:      c = checkDisplayOn(KEY_NEXT); break;
++    case T1PocketButtons::Previous:  c = checkDisplayOn(KEY_PREV); break;
++    case T1PocketButtons::UpperHold: c = handleLongPress(KEY_ENTER); break;
++    case T1PocketButtons::LowerHold: c = checkDisplayOn(KEY_ENTER); break;
++    default: break;
++  }
++#elif UI_HAS_JOYSTICK
+   int ev = user_btn.check();
+   if (ev == BUTTON_EVENT_CLICK) {
+@@ -1109,5 +1132,5 @@ char UITask::checkDisplayOn(char c) {
+     if (!_display->isOn()) {
+ #ifdef T1_POCKET_UI
+-      static_cast<HomeScreen*>(home)->resetPage();
++      if (c) static_cast<HomeScreen*>(home)->wakeForButton();
+       setCurrScreen(home);
+ #endif
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index a96af6b..d8d5310 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -7,4 +7,12 @@ class HomeScreen : public UIScreen {
+   NodePrefs* prefs;
+   Page page = Home;
++  bool pairingPromptShown = false;
++  bool pairingIntro = false;
++
++  uint32_t pairingPin() const {
++    if (!bluetooth_interface.isEnabled() || bluetooth_interface.isConnected()) return 0;
++    return the_mesh.getBLEPin();
++  }
++
+   bool powerOffAfterRelease = false;
+ 
+@@ -39,7 +47,30 @@ public:
+     : task(task), prefs(prefs) {}
+ 
+-  void resetPage() { page = Home; }
++  void resetPage() {
++    page = Home;
++    pairingIntro = false;
++  }
++
++  void wakeForButton() {
++    resetPage();
++    if (!pairingPromptShown && pairingPin()) {
++      page = Pairing;
++      pairingIntro = true;
++      pairingPromptShown = true;
++    }
++  }
++
++  bool updatePairingState() {
++    if (pairingPin()) return false;
++    pairingPromptShown = false;
++    if (page != Pairing) return false;
++    resetPage();
++    return true;
++  }
+ 
+   int render(DisplayDriver& d) override {
++    const uint32_t pin = pairingPin();
++    const Page visible = page == Pairing && !pin ? Home : page;
++    const int pageCount = pin ? Count : Pairing;
+     const bool gps = task->getGPSState();
+     const bool usb = board.isExternalPowered();
+@@ -60,5 +91,5 @@ public:
+     char detail[32];
+     d.setColor(UIColor::primary_txt);
+-    if (page == Home) {
++    if (visible == Home) {
+       if (rtc_clock.isSynced()) {
+ #ifdef T1_PACIFIC_TIME
+@@ -90,12 +121,10 @@ public:
+       d.drawTextRightAlign(125, 39, detail);
+       hint = "Hold to send advert";
+-    } else if (page == GPS) {
++    } else if (visible == GPS) {
+       d.setTextSize(2);
+       d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
+       d.setTextSize(1);
+-      d.setColor(UIColor::secondary_txt);
+-      d.drawTextLeftAlign(3, 39, gps ? "Time sync on valid fix" : "Phone can sync time");
+       hint = gps ? "Hold to turn GPS off" : "Hold to turn GPS on";
+-    } else if (page == Hibernate) {
++    } else if (visible == Hibernate) {
+       d.setTextSize(2);
+       d.drawTextLeftAlign(3, 19, "Hibernate");
+@@ -105,16 +134,11 @@ public:
+       hint = "Hold to hibernate";
+     } else {
+-      const uint32_t pin = the_mesh.getBLEPin();
+-      if (pin) {
+-        snprintf(detail, sizeof(detail), "%06lu", static_cast<unsigned long>(pin));
+-        d.setTextSize(2);
+-        d.drawTextLeftAlign(3, 19, detail);
+-      } else {
+-        d.drawTextLeftAlign(3, 22, "PIN unavailable");
+-      }
++      snprintf(detail, sizeof(detail), "%06lu", static_cast<unsigned long>(pin));
++      d.setTextSize(2);
++      d.drawTextLeftAlign(3, 19, detail);
+       d.setTextSize(1);
+       d.setColor(UIColor::secondary_txt);
+       d.drawTextLeftAlign(3, 39, "Bluetooth pairing PIN");
+-      hint = "Tap for Home";
++      hint = pairingIntro ? "Tap to dismiss" : "Tap to browse";
+     }
+     d.setColor(UIColor::title_bkg);
+@@ -122,6 +146,6 @@ public:
+     d.setColor(UIColor::title_txt);
+     d.drawTextLeftAlign(3, 54, hint);
+-    for (int i=0; i<Count; ++i) {
+-      d.setColor(i == page ? UIColor::title_txt : UIColor::title_bkg);
++    for (int i=0; i<pageCount; ++i) {
++      d.setColor(i == visible ? UIColor::title_txt : UIColor::title_bkg);
+       d.fillRect(110+i*5, 56, 3, 2);
+     }
+@@ -130,6 +154,13 @@ public:
+ 
+   bool handleInput(char c) override {
++    const uint32_t pin = pairingPin();
++    if (page == Pairing && !pin) return true;  // Link changed during this gesture.
+     if (c == KEY_NEXT || c == KEY_PREV) {
+-      page = Page((int(page) + (c == KEY_NEXT ? 1 : Count-1)) % Count);
++      if (pairingIntro) {
++        resetPage();
++        return true;
++      }
++      const int pageCount = pin ? Count : Pairing;
++      page = Page((int(page) + (c == KEY_NEXT ? 1 : pageCount-1)) % pageCount);
+       return true;
+     }
+diff --git a/variants/heltec_t1/T1PocketButtons.h b/variants/heltec_t1/T1PocketButtons.h
+new file mode 100644
+index 0000000..4eb557e
+--- /dev/null
++++ b/variants/heltec_t1/T1PocketButtons.h
+@@ -0,0 +1,50 @@
++#pragma once
++
++#include <stdint.h>
++
++// The T1's two active-low side switches share one gesture at a time.
++class T1PocketButtons {
++public:
++  enum Keys { Released = 0, Upper = 1, Lower = 2, Both = 3 };
++  enum Event { None, Next, Previous, UpperHold, LowerHold };
++
++  void cancelUntilRelease() { consumed = true; }
++  bool isPressed() const { return raw != Released || stable != Released; }
++
++  Event poll(Keys sample, uint32_t now) {
++    if (sample != raw) {
++      raw = sample;
++      changedAt = now;
++    }
++    // Suppress overlapping presses even if the overlap is shorter than debounce.
++    if (raw == Both || (raw != Released && stable != Released && raw != stable))
++      cancelUntilRelease();
++    if (now - changedAt < 25) return None;
++
++    if (raw != stable) {
++      Keys previous = stable;
++      stable = raw;
++      if (stable == Released) {
++        bool tap = !consumed;
++        consumed = false;
++        if (tap && previous == Upper) return Next;
++        if (tap && previous == Lower) return Previous;
++      } else {
++        pressedAt = changedAt;
++      }
++    }
++
++    if (stable == Released) {
++      consumed = false;
++    } else if (!consumed && now - pressedAt >= 1000) {
++      consumed = true;
++      return stable == Upper ? UpperHold : LowerHold;
++    }
++    return None;
++  }
++
++private:
++  Keys raw = Released, stable = Released;
++  uint32_t changedAt = 0, pressedAt = 0;
++  bool consumed = false;
++};
