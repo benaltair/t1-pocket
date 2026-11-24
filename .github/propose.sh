@@ -2,7 +2,7 @@
 set -euo pipefail
 [[ "$TAG" =~ ^companion-v[0-9]+\.[0-9]+\.[0-9]+$ && "$COMMIT" =~ ^[a-f0-9]{40}$ ]]
 branch="updates/$TAG"
-existing=$(gh pr list --head "$branch" --base "$BASE" --state all --json number --jq 'length')
+existing=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" -f head="${GITHUB_REPOSITORY%%/*}:$branch" -f base="$BASE" -f state=all --jq 'length')
 if [[ "$existing" != 0 ]]; then
   echo "An update PR already exists for $TAG."
   exit 0
@@ -23,4 +23,6 @@ Updates the pinned MeshCore companion release to [$TAG](https://github.com/meshc
 
 The [build and test run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) finished with **$RESULT**. Its artifacts contain the verified build manifests. Review any patch failures, then check clock sync, both companion connections, display and data preservation on a T1 before merging.
 EOF
-gh pr create --draft --base "$BASE" --head "$branch" --title "Update T1 Pocket to $TAG" --body-file "$RUNNER_TEMP/update-body.md"
+set --
+if [[ -n "${REVIEWER:-}" ]]; then set -- --reviewer "$REVIEWER"; fi
+gh pr create "$@" --draft --base "$BASE" --head "$branch" --title "Update T1 Pocket to $TAG" --body-file "$RUNNER_TEMP/update-body.md"
