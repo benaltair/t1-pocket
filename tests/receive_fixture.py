@@ -8,7 +8,12 @@ def write_callbacks(repo):
                               ("MyMesh.cpp", "void MyMesh::logTx("),
                               ("MyMesh.cpp", "void MyMesh::logTxFail("),
                               ("ui-new/UITask.cpp", "void UITask::onPocketTxDone("),
-                              ("ui-new/UITask.cpp", "void UITask::onControlDataRecv(")]:
+                              ("ui-new/UITask.cpp", "void UITask::onControlDataRecv("),
+                              ("ui-new/UITask.cpp", "void UITask::begin("),
+                              ("ui-new/UITask.cpp", "void UITask::loop("),
+                              ("ui-new/UITask.cpp", "void UITask::setCurrScreen("),
+                              ("ui-new/UITask.cpp", "char UITask::checkDisplayOn("),
+                              ("ui-new/UITask.cpp", "char UITask::handleLongPress(")]:
         text = (root / source).read_text()
         start = text.index(signature)
         # Each production method ends with an unindented closing brace.

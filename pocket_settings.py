@@ -18,10 +18,13 @@ def load_settings(path=None):
     if unknown:
         raise ValueError("Unknown settings: " + ", ".join(sorted(unknown)))
     values = {**defaults, **overrides}
-    for key, low, high in (("screen_timeout_seconds", 1, 3600), ("utc_offset_minutes", -720, 840)):
+    for key, low, high in (("screen_timeout_seconds", 1, 3600), ("screen_resume_seconds", 0, 3600),
+                           ("utc_offset_minutes", -720, 840)):
         value = values[key]
         if type(value) is not int or not low <= value <= high:
             raise ValueError(f"{key} must be an integer between {low} and {high}")
+    if type(values["screen_on_at_boot"]) is not bool:
+        raise ValueError("screen_on_at_boot must be true or false")
     if "utc_offset_minutes" in overrides and "clock_label" not in overrides:
         minutes = values["utc_offset_minutes"]
         if minutes:
@@ -40,6 +43,8 @@ def write_header(directory, values):
         "#pragma once\n"
         f"#define T1_SCREEN_TIMEOUT_MS {values['screen_timeout_seconds'] * 1000}UL\n"
         "namespace T1Build {\n"
+        f"  constexpr unsigned resumeSeconds = {values['screen_resume_seconds']};\n"
+        f"  constexpr bool screenOnAtBoot = {str(values['screen_on_at_boot']).lower()};\n"
         f"  constexpr int utcOffsetMinutes = {values['utc_offset_minutes']};\n"
         f"  constexpr char clockLabel[] = {json.dumps(values['clock_label'])};\n"
         f"  constexpr bool floodAdvert = {str(values['advert_scope'] == 'flood').lower()};\n"

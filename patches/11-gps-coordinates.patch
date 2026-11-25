@@ -1,0 +1,200 @@
+diff --git a/src/helpers/sensors/MicroNMEALocationProvider.h b/src/helpers/sensors/MicroNMEALocationProvider.h
+index d7e3c1a..a375359 100644
+--- a/src/helpers/sensors/MicroNMEALocationProvider.h
++++ b/src/helpers/sensors/MicroNMEALocationProvider.h
+@@ -80,6 +80,54 @@ class MicroNMEALocationProvider : public LocationProvider {
+     bool _nmea_seen = false;
+     bool _fix_seen = false;
+ 
++#ifdef T1_POCKET_UI
++    bool _have_position = false;
++    int32_t _position_lat = 0, _position_lon = 0;
++    uint32_t _position_seconds = 0;
++
++    static uint32_t uptimeSeconds() {
++        // The nRF52 core converts 1024 Hz ticks to millis(). Use the RTOS wrap
++        // count as well, so a long-lost fix never looks new at tick rollover.
++        static_assert(sizeof(TickType_t) == 4, "Review T1 GPS tick width");
++        TimeOut_t stamp;
++        vTaskSetTimeOutState(&stamp);
++        const uint64_t ticks = (uint64_t(uint32_t(stamp.xOverflowCount)) << 32) | stamp.xTimeOnEntering;
++        return uint32_t(ticks / configTICK_RATE_HZ);
++    }
++
++    // MicroNMEA accepts empty coordinate fields as zero. Require both actual
++    // degree/minute fields and their hemisphere letters, including at (0, 0).
++    static bool hasCoordinate(const char*& field, unsigned degrees, char positive, char negative) {
++        if (!field) return false;
++        for (unsigned i = 0; i < degrees + 2; ++i) {
++            if (*field < '0' || *field > '9' || (i == degrees && *field > '5')) return false;
++            ++field;
++        }
++        if (*field == '.') {
++            ++field;
++            if (*field < '0' || *field > '9') return false;
++            while (*field >= '0' && *field <= '9') ++field;
++        }
++        if (*field++ != ',' || (*field != positive && *field != negative)) return false;
++        if (*++field != ',') return false;
++        ++field;
++        return true;
++    }
++
++    void rememberPosition(bool rmc) {
++        const char* field = MicroNMEA::skipField(nmea.getSentence()); // time
++        field = MicroNMEA::skipField(field);
++        if (rmc) field = MicroNMEA::skipField(field); // RMC has a status before latitude
++        if (!hasCoordinate(field, 2, 'N', 'S') || !hasCoordinate(field, 3, 'E', 'W')) return;
++        const long lat = nmea.getLatitude(), lon = nmea.getLongitude();
++        if (lat < -90000000L || lat > 90000000L || lon < -180000000L || lon > 180000000L) return;
++        _position_lat = lat;
++        _position_lon = lon;
++        _position_seconds = uptimeSeconds();
++        _have_position = true;
++    }
++#endif
++
+     static uint32_t ageMs(unsigned long timestamp) {
+         return (uint32_t)(millis() - timestamp);
+     }
+@@ -119,6 +167,7 @@ public :
+     void begin() override {
+ #ifdef T1_POCKET_UI
+         _fix_seen = false;
++        _have_position = false;
+ #endif
+         _begin_calls++;
+         claim();
+@@ -133,6 +182,7 @@ public :
+     void reset() override {
+ #ifdef T1_POCKET_UI
+         _fix_seen = false;
++        _have_position = false;
+ #endif
+         if (_pin_reset != -1) {
+             digitalWrite(_pin_reset, GPS_RESET_ACTIVE);
+@@ -149,6 +199,7 @@ public :
+     void stop() override {
+ #ifdef T1_POCKET_UI
+         _fix_seen = false;
++        _have_position = false;
+ #endif
+         _stop_calls++;
+ #ifdef T1_COMPANION_CLOCK
+@@ -184,8 +235,12 @@ public :
+     long satellitesCount() override { return nmea.getNumSatellites(); }
+     bool isValid() override { return nmea.isValid(); }
+ #ifdef T1_POCKET_UI
+-    bool hasRecentFix() {
+-        return isEnabled() && _fix_seen && isValid() && ageMs(_last_fix_ms) < 5000;
++    bool lastPosition(int32_t& lat, int32_t& lon, uint32_t& ageSeconds) {
++        if (!_have_position || !isEnabled()) return false;
++        lat = _position_lat;
++        lon = _position_lon;
++        ageSeconds = uptimeSeconds() - _position_seconds;
++        return true;
+     }
+ #endif
+ 
+@@ -251,6 +306,9 @@ public :
+                             dated_fix_ms = millis();
+                             have_dated_fix = true;
+                         }
++#endif
++#ifdef T1_POCKET_UI
++                        rememberPosition(strcmp(message_id, "RMC") == 0);
+ #endif
+                         _last_fix_ms = millis();
+                         _fix_seen = true;
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index 6f26ebb..2378547 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -21,6 +21,43 @@ class HomeScreen : public UIScreen {
+ 
+   bool powerOffAfterRelease = false;
+ 
++  static void drawCoordinate(DisplayDriver& d, int y, int32_t value, char direction) {
++    const uint32_t rounded = (uint32_t(value < 0 ? -value : value) + 5) / 10;
++    char text[16];
++    snprintf(text, sizeof(text), "%lu.%05lu %c", (unsigned long)(rounded / 100000),
++             (unsigned long)(rounded % 100000), direction);
++    d.drawTextLeftAlign(3, y, text);
++  }
++
++  static void drawGps(DisplayDriver& d, bool enabled) {
++    int32_t lat, lon;
++    uint32_t age;
++    d.setTextSize(2);
++    if (enabled && t1LastGpsPosition(lat, lon, age)) {
++      drawCoordinate(d, 15, lat, lat < 0 ? 'S' : 'N');
++      drawCoordinate(d, 29, lon, lon < 0 ? 'W' : 'E');
++      d.setTextSize(1);
++      d.setColor(UIColor::secondary_txt);
++      char text[32] = "Last fix just now";
++      if (age) {
++        uint32_t scale = 1;
++        char unit = 's';
++        if (age >= 86400) { scale = 86400; unit = 'd'; }
++        else if (age >= 3600) { scale = 3600; unit = 'h'; }
++        else if (age >= 60) { scale = 60; unit = 'm'; }
++        snprintf(text, sizeof(text), "Last fix %lu%c ago", (unsigned long)(age / scale), unit);
++      }
++      d.drawTextLeftAlign(3, 42, text);
++    } else {
++      d.drawTextLeftAlign(3, 19, enabled ? "GPS on" : "GPS off");
++      d.setTextSize(1);
++      if (enabled) {
++        d.setColor(UIColor::secondary_txt);
++        d.drawTextLeftAlign(3, 39, "Searching for fix");
++      }
++    }
++  }
++
+   static bool validBattery(unsigned mv) {
+     return mv >= 2500 && mv <= 4350;
+   }
+@@ -140,13 +177,7 @@ public:
+     } else if (visible == Repeaters) {
+       hint = discovery.draw(d, millis(), detail, sizeof(detail));
+     } else if (visible == GPS) {
+-      d.setTextSize(2);
+-      d.drawTextLeftAlign(3, 19, gps ? "GPS on" : "GPS off");
+-      d.setTextSize(1);
+-      if (gps) {
+-        d.setColor(UIColor::secondary_txt);
+-        d.drawTextLeftAlign(3, 39, t1HasGpsFix() ? "Position fix" : "Searching for fix");
+-      }
++      drawGps(d, gps);
+       hint = gps ? "Hold to turn GPS off" : "Hold to turn GPS on";
+     } else if (visible == Beeper) {
+       const bool muted = task->isBuzzerQuiet();
+diff --git a/variants/heltec_t1/target.cpp b/variants/heltec_t1/target.cpp
+index 2a8bf32..e35ca40 100644
+--- a/variants/heltec_t1/target.cpp
++++ b/variants/heltec_t1/target.cpp
+@@ -46,9 +46,9 @@ EnvironmentSensorManager sensors;
+ #endif
+ 
+ #ifdef T1_POCKET_UI
+-bool t1HasGpsFix() {
++bool t1LastGpsPosition(int32_t& lat, int32_t& lon, uint32_t& ageSeconds) {
+ #if ENV_INCLUDE_GPS
+-  return nmea.hasRecentFix();
++  return nmea.lastPosition(lat, lon, ageSeconds);
+ #else
+   return false;
+ #endif
+diff --git a/variants/heltec_t1/target.h b/variants/heltec_t1/target.h
+index 035eca6..b10646a 100644
+--- a/variants/heltec_t1/target.h
++++ b/variants/heltec_t1/target.h
+@@ -26,7 +26,7 @@ extern AutoDiscoverRTCClock rtc_clock;
+ #endif
+ extern EnvironmentSensorManager sensors;
+ #ifdef T1_POCKET_UI
+-bool t1HasGpsFix();
++bool t1LastGpsPosition(int32_t& lat, int32_t& lon, uint32_t& ageSeconds);
+ #endif
+ 
+ #ifdef DISPLAY_CLASS

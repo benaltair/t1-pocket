@@ -1,5 +1,7 @@
 {
   "screen_timeout_seconds": 30,
+  "screen_resume_seconds": 15,
+  "screen_on_at_boot": true,
   "utc_offset_minutes": 0,
   "clock_label": "UTC",
   "advert_scope": "flood"

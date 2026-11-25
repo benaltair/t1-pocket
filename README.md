@@ -6,7 +6,7 @@ An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with 
 
 Home shows the clock, queued messages and battery voltage. A plug replaces the battery bars on USB. The bottom line tells you what a hold will do on each page.
 
-<img src="screen-preview.png" width="652" alt="Eight firmware screens. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS searching and holding a position fix, then Beeper off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
+<img src="screen-preview.png" width="652" alt="Eight firmware screens. Home shows the UTC clock on battery and a clock-sync prompt on USB. The next two rows show GPS searching and displaying a coordinate pair, then Beeper off and on. The last row shows Hibernate and the pairing prompt with a sample PIN." />
 
 ### Discover Repeaters
 
@@ -16,9 +16,15 @@ One upper tap from Home opens Repeaters. Hold either button there for one nearby
 
 ## On the node
 
-Tap either side button to wake the display. On a lit screen, tap the upper button to go forward or the lower button to go back. Hold either for one second to use the action on the current page. Home sends an advert after clock sync. The GPS page toggles the receiver and shows “Searching for fix” or “Position fix” while it is on. Beeper toggles the T1’s saved quiet setting. Hibernate powers down after release. The screen sleeps after 30 seconds of inactivity by default, including on USB. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+Home appears as soon as the companion finishes starting. The display sleeps after 30 idle seconds by default, including on USB. Tap either side button within 15 seconds **after the screen goes dark** to return to the same page. A later wake opens Home. The wake gesture only lights the screen.
 
-When Bluetooth is available and a phone is disconnected, the first button wake shows the six-digit pairing PIN. Tap either button to dismiss it. Later wakes open Home. To see the PIN again, tap the lower button from Home. As soon as a Bluetooth connection is secured, the PIN disappears and both buttons skip the Pairing page. Disconnecting leaves the screen asleep if it was asleep. USB charging or a wired session alone does not hide the PIN.
+While the screen is lit, tap the upper button to go forward or the lower button to go back. Hold either button for one second to use the action shown at the bottom. On Home, a hold sends an advert once the clock is synced. Beeper toggles the saved quiet setting. Hibernate powers down after release. During the first eight seconds after boot, holding the upper button enters MeshCore rescue mode. [Side button diagram, page 5](https://resource.heltec.cn/download/Mesh_Node_T1/Datasheet/Mesh-Node-T1.pdf#page=5)
+
+**GPS.** From Home, tap the upper button twice. Hold to turn the receiver on. The page shows “Searching for fix” until it has a valid position, then displays latitude, longitude and the age of the fix. If reception drops, the last coordinates stay visible and their age increases. The receiver can keep acquiring a fix with the screen asleep. Switching GPS off or restarting clears the displayed fix.
+
+**Pairing.** Tap the lower button once from Home to see the six-digit PIN when Bluetooth is available. A secured Bluetooth connection immediately hides the PIN and removes the page from navigation. Disconnecting makes the page available again. USB charging or a wired session alone leaves it available.
+
+Node names and repeater names use the display’s built-in font. Unsupported emoji are omitted on screen. The original names are preserved in contacts and on the mesh.
 
 Each restart asks for a phone or computer time sync. When the owner has enabled GPS, a fresh dated fix can also set time. The firmware uses the local companion’s clock-sync command and accepts corrections backwards. The mesh always uses UTC timestamps. The build settings control the clock shown on the display.
 
@@ -32,7 +38,7 @@ With Python 3.9+, Git, a C++ compiler and PlatformIO Core on PATH, build from th
 python3 update.py --out builds
 ```
 
-One command builds the USB/Bluetooth companion. The public defaults are a 30-second idle timeout, a UTC clock and a flood advert. To set your own defaults, copy the example once and edit the local file.
+One command builds the USB/Bluetooth companion. The public defaults show Home at startup, sleep after 30 seconds, remember the page for 15 seconds, display UTC and send flood adverts. To set your own defaults, copy the example once and edit the local file.
 
 ```sh
 cp pocket.example.json pocket.local.json
@@ -42,9 +48,22 @@ python3 update.py --out builds
 | Setting | Meaning |
 | --- | --- |
 | `screen_timeout_seconds` | Idle time before the display sleeps, from 1 to 3600 seconds. |
+| `screen_resume_seconds` | Seconds after the display goes dark that a wake restores the previous page. Default 15. Use 0 for Home on every wake. Range 0–3600. |
+| `screen_on_at_boot` | `true` shows Home after startup. `false` turns the screen off when startup finishes. |
 | `utc_offset_minutes` | Fixed display offset from UTC in minutes, from −720 to +840. |
 | `clock_label` | Up to eight letters, digits, or `+`, `-`, `:` shown beside the time. |
 | `advert_scope` | `flood` uses the node’s configured scope. `zero-hop` reaches direct neighbours. |
+
+For example, this entire `pocket.local.json` selects direct adverts and keeps a page available for one minute after sleep. All other settings inherit the public defaults.
+
+```json
+{
+  "advert_scope": "zero-hop",
+  "screen_resume_seconds": 60
+}
+```
+
+Rebuild and install after changing preferences. The same USB/Bluetooth firmware target handles both advert scopes. The Repeaters page always uses a direct request, regardless of the Home advert setting.
 
 Git ignores `*.local.json` and the build output. A local file can override just the settings you want. Supplying only an offset gives the clock a numeric offset label. Pass `--config path/to/file.json` to select another file. CI always builds the checked-in example. The build produces a UF2, a Nordic application DFU ZIP and a manifest with the upstream commit and SHA-256 values. Dependencies follow the selected upstream release. Manifests identify individual builds.
 
