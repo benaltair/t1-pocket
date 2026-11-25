@@ -122,7 +122,8 @@ struct UITask {
   void toggleBuzzer() { muted=!muted; ++beeperToggles; }
   bool getGPSState() { return gps; }
   unsigned millivolts=3810;
-  unsigned getBattMilliVolts() { return millivolts; }
+  unsigned batteryReads=0;
+  unsigned getBattMilliVolts() { ++batteryReads; return millivolts; }
   int getMsgCount() { return 2; }
   void showAlert(const char* msg, int) { alert=msg; }
   void toggleGPS() { gps=!gps; }
@@ -217,6 +218,9 @@ static void testWake() {
   tap(PIN_BUTTON1);tap(PIN_BUTTON1);
   assert(panel.largeText=="GPS off");
   step(T1_SCREEN_TIMEOUT_MS);assert(!panel.on);
+  const auto readsAtSleep = task.batteryReads;
+  step(20);
+  assert(task.batteryReads == readsAtSleep);
   tap(PIN_BUTTON2);
   if (T1Build::resumeSeconds) {
     assert(panel.on && panel.largeText=="GPS off" && !task.gps);
@@ -262,11 +266,32 @@ int main(){
   board.usb=false;
   for (const auto& test : {std::make_pair(3300u,0), {3450u,1}, {3650u,2}, {3800u,3}, {4000u,4}, {0u,0}, {5000u,0}}) {
     display.bars=0; display.plug=false; task.millivolts=test.first;
+    nowMs += 3000; // Each standalone band check starts with a fresh sample.
     puts("PAGE battery-check");home.render(display);
     assert(display.bars==test.second && !display.plug);
     if (test.first==0 || test.first==5000) assert(display.voltage=="-- V");
   }
-  task.millivolts=3810;
+  auto voltageAfter = [&](unsigned ms, unsigned mv) {
+    nowMs += ms; task.millivolts = mv;
+    home.render(display);
+    return display.voltage;
+  };
+  nowMs=0xfffff000; // Sampling crosses the 32-bit timer rollover.
+  for (unsigned i=0; i<T1Build::batterySamples; ++i) voltageAfter(1000, 3800);
+  auto before = task.batteryReads;
+  assert(voltageAfter(500,4200)=="3.80 V" && task.batteryReads==before);
+  auto spike=voltageAfter(500,4200);
+  if (T1Build::batterySamples>=5) assert(spike=="3.80 V");
+  if (T1Build::batterySamples==1) assert(spike=="4.20 V");
+  for (unsigned i=0; i<T1Build::batterySamples; ++i) voltageAfter(1000,4200);
+  assert(display.voltage=="4.20 V");
+  assert(voltageAfter(1000,0)=="4.20 V");
+  assert(voltageAfter(2000,0)=="-- V");
+  assert(voltageAfter(1000,3810)=="3.81 V");
+  board.usb=true;
+  assert(voltageAfter(0,4180)=="4.18 V");
+  board.usb=false;
+  assert(voltageAfter(0,3810)=="3.81 V");
   puts("PAGE home");home.render(display);
   home.handleInput(KEY_ENTER);
   assert(the_mesh.sent==1);

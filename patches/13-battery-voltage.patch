@@ -1,0 +1,128 @@
+diff --git a/variants/heltec_t1/T1BatteryVoltage.h b/variants/heltec_t1/T1BatteryVoltage.h
+new file mode 100644
+index 0000000..6f3d5f9
+--- /dev/null
++++ b/variants/heltec_t1/T1BatteryVoltage.h
+@@ -0,0 +1,52 @@
++#pragma once
++
++#include "T1BuildSettings.h"
++#include <stdint.h>
++
++// The screen calls this filter only when rendering a visible frame.
++class T1BatteryVoltage {
++  static constexpr unsigned Window = T1Build::batterySamples;
++  uint16_t samples[Window] = {};
++  unsigned count = 0, next = 0;
++  uint32_t lastRead = 0, lastValid = 0;
++  bool sampled = false;
++  bool lastUsb = false;
++
++public:
++  void reset() {
++    count = next = 0;
++    sampled = false;
++  }
++
++  unsigned read(UITask& task, bool usb, uint32_t now) {
++    if (usb != lastUsb) reset();
++    lastUsb = usb;
++    if (!sampled || now - lastRead >= 1000) {
++      if (count && now - lastValid >= 3000) count = next = 0;
++      const unsigned mv = task.getBattMilliVolts();
++      sampled = true;
++      lastRead = now;
++      if (mv >= 2500 && mv <= 4350) {
++        samples[next] = mv;
++        next = (next + 1) % Window;
++        if (count < Window) ++count;
++        lastValid = now;
++      }
++    }
++    if (!count) return 0;
++
++    unsigned sum = 0, low = samples[0], high = samples[0];
++    for (unsigned i = 0; i < count; ++i) {
++      const unsigned mv = samples[i];
++      sum += mv;
++      if (mv < low) low = mv;
++      if (mv > high) high = mv;
++    }
++    unsigned divisor = count;
++    if (count >= 5) {
++      sum -= low + high;
++      divisor -= 2;
++    }
++    return (sum + divisor / 2) / divisor;
++  }
++};
+diff --git a/variants/heltec_t1/T1HomeScreen.h b/variants/heltec_t1/T1HomeScreen.h
+index 52e3cdd..16ffe58 100644
+--- a/variants/heltec_t1/T1HomeScreen.h
++++ b/variants/heltec_t1/T1HomeScreen.h
+@@ -1,5 +1,6 @@
+ #pragma once
+ #include "T1BuildSettings.h"
++#include "T1BatteryVoltage.h"
+ 
+ #include "T1RepeaterDiscovery.h"
+ 
+@@ -7,6 +8,7 @@
+ class HomeScreen : public UIScreen {
+   enum Page { Home, Repeaters, GPS, Beeper, Hibernate, Pairing, Count };
+   T1RepeaterDiscovery discovery;
++  T1BatteryVoltage battery;
+   bool scanHeldDisplay = false;
+   UITask* task;
+   NodePrefs* prefs;
+@@ -57,10 +59,6 @@ class HomeScreen : public UIScreen {
+     }
+   }
+ 
+-  static bool validBattery(unsigned mv) {
+-    return mv >= 2500 && mv <= 4350;
+-  }
+-
+   static void drawBattery(DisplayDriver& d, unsigned mv, bool usb) {
+     // Coarse voltage bands for the T1's single lithium cell under load.
+     // Charging raises terminal voltage, so show the plug while on USB.
+@@ -75,7 +73,7 @@ class HomeScreen : public UIScreen {
+       d.fillRect(115, 4, 1, 2);
+       d.fillRect(110, 6, 7, 2);
+       d.fillRect(113, 8, 1, 2);
+-    } else if (validBattery(mv)) {
++    } else if (mv != 0) {
+       static const unsigned levels[] = {3450, 3650, 3800, 4000};
+       d.setColor(mv < levels[1] ? UIColor::warning_txt : UIColor::title_txt);
+       for (int bar=0; bar<4 && mv>=levels[bar]; ++bar)
+@@ -109,6 +107,7 @@ public:
+   }
+ 
+   void displayDidSleep() {
++    battery.reset();
+     vTaskSetTimeOutState(&displaySleepTime);
+   }
+ 
+@@ -131,7 +130,7 @@ public:
+     const int pageCount = pin ? Count : Pairing;
+     const bool gps = task->getGPSState();
+     const bool usb = board.isExternalPowered();
+-    const unsigned mv = task->getBattMilliVolts();
++    const unsigned mv = battery.read(*task, usb, millis());
+     const char* status = gps ? (usb ? "GPS  USB" : "GPS") : (usb ? "USB" : "");
+     d.setTextSize(1);
+     d.setColor(UIColor::secondary_txt);
+@@ -166,9 +165,10 @@ public:
+       d.setTextSize(1);
+       d.setColor(UIColor::secondary_txt);
+       d.drawTextLeftAlign(3, 39, detail);
+-      if (validBattery(mv))
+-        snprintf(detail, sizeof(detail), "%u.%02u V", mv/1000, (mv%1000)/10);
+-      else
++      if (mv != 0) {
++        const unsigned hundredths = (mv + 5) / 10;
++        snprintf(detail, sizeof(detail), "%u.%02u V", hundredths/100, hundredths%100);
++      } else
+         snprintf(detail, sizeof(detail), "-- V");
+       d.drawTextRightAlign(125, 39, detail);
+       hint = "Hold to send advert";

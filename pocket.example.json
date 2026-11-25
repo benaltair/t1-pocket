@@ -1,4 +1,5 @@
 {
+  "battery_average_samples": 8,
   "screen_timeout_seconds": 30,
   "screen_resume_seconds": 15,
   "screen_on_at_boot": true,

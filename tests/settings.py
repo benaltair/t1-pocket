@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory() as tmp:
         assert "#define T1_SCREEN_TIMEOUT_MS 5000UL" in (root / "T1BuildSettings.h").read_text()
         header = (root / "T1BuildSettings.h").read_text()
         assert "resumeSeconds = 0;" in header and "screenOnAtBoot = false;" in header and "floodAdvert = false;" in header
-        for bad in ({"screen_resume_seconds": -1}, {"screen_resume_seconds": 3601}, {"screen_on_at_boot": 1},{"screen_timeout_seconds": True}, {"screen_timeout_seconds": 0},
+        assert defaults["battery_average_samples"] == 8
+        for bad in ({"battery_average_samples": 0}, {"battery_average_samples": 33},
+                    {"battery_average_samples": True}, {"screen_resume_seconds": -1}, {"screen_resume_seconds": 3601}, {"screen_on_at_boot": 1},{"screen_timeout_seconds": True}, {"screen_timeout_seconds": 0},
                     {"utc_offset_minutes": 841}, {"clock_label": 'bad"'},
                     {"advert_scope": "unknown"}, {"typo": 1}, []):
             local.write_text(json.dumps(bad))

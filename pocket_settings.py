@@ -19,7 +19,7 @@ def load_settings(path=None):
         raise ValueError("Unknown settings: " + ", ".join(sorted(unknown)))
     values = {**defaults, **overrides}
     for key, low, high in (("screen_timeout_seconds", 1, 3600), ("screen_resume_seconds", 0, 3600),
-                           ("utc_offset_minutes", -720, 840)):
+                           ("utc_offset_minutes", -720, 840), ("battery_average_samples", 1, 32)):
         value = values[key]
         if type(value) is not int or not low <= value <= high:
             raise ValueError(f"{key} must be an integer between {low} and {high}")
@@ -43,6 +43,7 @@ def write_header(directory, values):
         "#pragma once\n"
         f"#define T1_SCREEN_TIMEOUT_MS {values['screen_timeout_seconds'] * 1000}UL\n"
         "namespace T1Build {\n"
+        f"  constexpr unsigned batterySamples = {values['battery_average_samples']};\n"
         f"  constexpr unsigned resumeSeconds = {values['screen_resume_seconds']};\n"
         f"  constexpr bool screenOnAtBoot = {str(values['screen_on_at_boot']).lower()};\n"
         f"  constexpr int utcOffsetMinutes = {values['utc_offset_minutes']};\n"

@@ -28,7 +28,7 @@ Node names and repeater names use the display’s built-in font. Unsupported emo
 
 Each restart asks for a phone or computer time sync. When the owner has enabled GPS, a fresh dated fix can also set time. The firmware uses the local companion’s clock-sync command and accepts corrections backwards. The mesh always uses UTC timestamps. The build settings control the clock shown on the display.
 
-The icon in the header shows four coarse voltage bands when running on battery. Home also shows measured terminal voltage. Bars appear at 3.45, 3.65, 3.80 and 4.00 V. These are approximate bands for the T1’s single-cell lithium pack. They have not been calibrated against a full discharge of a specific unit. On USB the icon shows a plug and Home still shows voltage. The charger’s CHRG output drives the red LED. Firmware can see USB power and battery voltage, but the V1.0 schematic shows no processor connection to CHRG or DONE. An out-of-range battery reading displays “-- V”. [T1 schematic](https://resource.heltec.cn/download/Mesh_Node_T1/schematic/Mesh_Node_T1_V1.0.pdf)
+The icon in the header shows four coarse voltage bands when running on battery. Home shows battery terminal voltage averaged across the last eight valid readings. The header bars use the same value. The display samples at most once a second while lit and drops the highest and lowest readings once five are available. Waking the screen or changing between USB and battery starts a fresh average. After three seconds without a valid reading, Home shows “-- V”. Bars appear at 3.45, 3.65, 3.80 and 4.00 V. These are approximate bands for the T1’s single-cell lithium pack. They have not been calibrated against a full discharge of a specific unit. On USB the icon shows a plug and Home still shows voltage. The charger’s CHRG output drives the red LED. Firmware can see USB power and battery voltage, but the V1.0 schematic shows no processor connection to CHRG or DONE. [T1 schematic](https://resource.heltec.cn/download/Mesh_Node_T1/schematic/Mesh_Node_T1_V1.0.pdf)
 
 ## Build and flash
 
@@ -47,6 +47,7 @@ python3 update.py --out builds
 
 | Setting | Meaning |
 | --- | --- |
+| `battery_average_samples` | Number of readings in the displayed voltage average, from 1 to 32. Default 8. Use 1 for the latest reading. |
 | `screen_timeout_seconds` | Idle time before the display sleeps, from 1 to 3600 seconds. |
 | `screen_resume_seconds` | Seconds after the display goes dark that a wake restores the previous page. Default 15. Use 0 for Home on every wake. Range 0–3600. |
 | `screen_on_at_boot` | `true` shows Home after startup. `false` turns the screen off when startup finishes. |
