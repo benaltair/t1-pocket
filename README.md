@@ -2,6 +2,16 @@
 
 An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with the nRF52840, SX1262 and 160 × 80 colour screen. It builds application-only updates against a pinned official MeshCore companion release. The combined build accepts USB serial or paired Bluetooth, one active client at a time. A USB charger leaves Bluetooth available. [Heltec hardware](https://heltec.org/project/mesh-node-t1/) · [Upstream firmware](https://github.com/meshcore-dev/MeshCore)
 
+## Quick start
+
+**For a Heltec Mesh Node T1 already running a compatible MeshCore companion.** The public build uses Bluetooth and USB, displays UTC, and sends flood adverts from Home.
+
+1. Download the **`.uf2`** from the [latest T1 Pocket release](https://github.com/benaltair/t1-pocket/releases/latest). Let your phone receive queued messages and back up the node’s identity, contacts, channels and settings.
+2. Connect the T1 by USB and double-press the rear power button. On the mounted update drive, open `INFO_UF2.TXT`. Check for `Board-ID: mesh-node-t1` and `SoftDevice: S140 6.1.1`.
+3. Copy the UF2 onto that drive and let the node restart. Reconnect in MeshCore, sync the clock, and check your node name, contacts and channels. Home will appear after startup.
+
+Each release also includes a Nordic application DFU ZIP and a SHA-256 manifest. For your own time zone, advert scope or display settings, see [Build from source](#build-from-source). [Heltec USB update instructions](https://github.com/HelTecAutomation/HeltecWiKi/blob/main/docs/devices/open-source-hardware/nrf52840-series/mesh-node-t1/Usage.md)
+
 ## Screen preview
 
 Home shows the clock, queued messages and battery voltage. A plug replaces the battery bars on USB. The bottom line tells you what a hold will do on each page.
@@ -30,7 +40,9 @@ Each restart asks for a phone or computer time sync. When the owner has enabled 
 
 The icon in the header shows four coarse voltage bands when running on battery. Home shows battery terminal voltage averaged across the last eight valid readings. The header bars use the same value. The display samples at most once a second while lit and drops the highest and lowest readings once five are available. Waking the screen or changing between USB and battery starts a fresh average. After three seconds without a valid reading, Home shows “-- V”. Bars appear at 3.45, 3.65, 3.80 and 4.00 V. These are approximate bands for the T1’s single-cell lithium pack. They have not been calibrated against a full discharge of a specific unit. On USB the icon shows a plug and Home still shows voltage. The charger’s CHRG output drives the red LED. Firmware can see USB power and battery voltage, but the V1.0 schematic shows no processor connection to CHRG or DONE. [T1 schematic](https://resource.heltec.cn/download/Mesh_Node_T1/schematic/Mesh_Node_T1_V1.0.pdf)
 
-## Build and flash
+<a id="build-and-flash"></a>
+
+## Build from source
 
 With Python 3.9+, Git, a C++ compiler and PlatformIO Core on PATH, build from the root of this directory. CI uses PlatformIO 6.2.0.
 
@@ -68,9 +80,7 @@ Rebuild and install after changing preferences. The same USB/Bluetooth firmware 
 
 Git ignores `*.local.json` and the build output. A local file can override just the settings you want. Supplying only an offset gives the clock a numeric offset label. Pass `--config path/to/file.json` to select another file. CI always builds the checked-in example. The build produces a UF2, a Nordic application DFU ZIP and a manifest with the upstream commit and SHA-256 values. Dependencies follow the selected upstream release. Manifests identify individual builds.
 
-1. Start with a **Heltec Mesh Node T1 already running a compatible MeshCore companion**, and allow the phone to receive queued messages. Export that node’s identity, contacts, channels and settings to its owner’s private backup.
-2. Connect by USB and double-press the **rear power button**. Open the mounted drive’s `INFO_UF2.TXT` and confirm `Board-ID: mesh-node-t1` and `SoftDevice: S140 6.1.1`. These images cover only the T1 application partition. Other boards, repeaters, room servers and migrations from another firmware family need their own build or migration procedure.
-3. Copy the built UF2 onto that drive and allow it to restart. Reconnect, sync the clock and confirm the node’s own identity, radio region/preset, contacts, channels and GPS setting. USB and Bluetooth clients should successively identify the same node. Let the first client disconnect before opening the second. [Heltec USB update instructions](https://github.com/HelTecAutomation/HeltecWiKi/blob/main/docs/devices/open-source-hardware/nrf52840-series/mesh-node-t1/Usage.md)
+Install your locally built UF2 using the [quick start](#quick-start).
 
 For subsequent updates on the combined build, let the phone receive its queued messages and disconnect it in MeshCore. Open the local companion CLI over USB and send `usb update`. The T1 saves pending contact changes and opens the same USB update drive as the rear-button gesture. If it replies “Receive queued messages first”, reconnect the phone and receive them before retrying. Confirm the board ID and copy the new UF2 as above. This path was tested on a physical T1 running the combined v1.18.0 build.
 
@@ -82,7 +92,11 @@ On a correctly identified T1, an application-only MeshCore update preserves the 
 
 The included GitHub Actions workflow checks GitHub’s published MeshCore companion releases daily at 09:17 UTC and on manual dispatch. Each new stable release gets the public companion build and host tests, including when several releases arrive between checks. A separate draft PR proposes each tag and its exact upstream commit. Previously reviewed or closed proposals stay closed. Its description links to the test run and records success or failure. Conflicts stay visible for a maintainer to port and retest. Pull requests run the checks again when a contributor pushes changes. Review and merge on the repository’s default branch after a T1 hardware check.
 
-To activate this in your own GitHub repository, push this source to `main`, enable Actions, and allow GitHub Actions to create pull requests in repository settings. Set the optional repository Actions variable `T1_REVIEWER` to the GitHub login that should receive review requests. The workflow publishes build manifests as CI artifacts. Creating a public firmware release is a separate maintainer action.
+To activate this in your own GitHub repository, push this source to `main`, enable Actions, and allow GitHub Actions to create pull requests in repository settings. Set the optional repository Actions variable `T1_REVIEWER` to the GitHub login that should receive review requests. After an update merges to `main`, the public-default build runs again. A successful new firmware version is published to GitHub Releases with its UF2, Nordic application ZIP and checksum manifest. A repeat build of the same version keeps the existing download. Draft PR builds are available as short-lived Actions artifacts.
+
+## Make it your own
+
+Fork this project to try another screen layout or adapt it to a different companion. Start with `pocket.example.json` for preferences. For UI changes, the board overlay lives in `patches/`, and `tests/screen.cpp` exercises the display and gestures. A port to another board needs its own display driver, pin mapping, build target and application-image checks. Screenshots and board-specific PRs are welcome.
 
 ## Contributions and licensing
 

@@ -31,6 +31,13 @@ def latest(remote):
     return max((tag for tag in tags if TAG.fullmatch(tag)),
                key=lambda tag: tuple(map(int,TAG.fullmatch(tag).groups())))
 
+def build_version(tag, settings, patches):
+    digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
+    for patch in patches:
+        digest.update(patch.read_bytes())
+    return f"{tag.removeprefix('companion-')}-t1{digest.hexdigest()[:6]}"
+
+
 def select_patches(profile):
     patches = sorted((KIT / "patches").glob("*.patch"))
     for patch in patches:
@@ -86,10 +93,7 @@ def main():
     except (OSError, ValueError) as err:
         parser.error(str(err))
     patches = list(select_patches(args.profile))
-    digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
-    for patch in patches:
-        digest.update(patch.read_bytes())
-    version = f"{tag.removeprefix('companion-')}-t1{digest.hexdigest()[:6]}"
+    version = build_version(tag, settings, patches)
     if len(version)>19: raise ValueError("Version exceeds companion wire field")
     with tempfile.TemporaryDirectory(prefix="heltec-t1-") as tmp:
         repo=Path(tmp)/"MeshCore"
