@@ -51,6 +51,20 @@ def checked_files(directory):
     return version, pin["tag"], [path] + [path.parent / name for name in hashes]
 
 
+def release_notes(repo, version, upstream):
+    commit = json.loads(Path("upstream.json").read_text())["commit"]
+    base = "https://github.com/" + repo + "/releases/download/" + version + "/"
+    filename = version + ".uf2"
+    stock_name = f"Heltec_t1_companion_radio_ble-{upstream.removeprefix('companion-')}-{commit[:7]}.uf2"
+    urls = output("gh", "api", "repos/meshcore-dev/MeshCore/releases/tags/" + upstream,
+                  "--jq", ".assets[].browser_download_url").splitlines()
+    url = f"https://github.com/meshcore-dev/MeshCore/releases/download/{upstream}/{stock_name}"
+    stock = 'Download the [official Bluetooth companion UF2]({url}) for {upstream} and copy it to the same USB drive using steps 2–3. Reconnect your phone over Bluetooth.' if url in urls else 'Use the official flasher to select the stock Bluetooth companion firmware.'
+    return (Path(__file__).with_name("release-notes.md").read_text().format(
+        download_url=base + filename, filename=filename, repo=repo, manifest_url=base + "manifest.json",
+        stock_instruction=stock.format(url=url, upstream=upstream)).rstrip() + "\n\n" + MARKER + "\n")
+
+
 def publish(directory, repo, commit):
     version, upstream, files = checked_files(directory)
     release = release_info(repo, version)
@@ -71,10 +85,7 @@ def publish(directory, repo, commit):
         print("A newer main commit will publish its build.")
         return
     if not release:
-        notes = (f"Public-default **{PROJECT}** firmware, based on MeshCore `{upstream}`.\n\n"
-                 "Use the `.uf2` for a USB update on a Heltec Mesh Node T1 companion. The `-dfu.zip` is the Nordic application package. The defaults use UTC, flood adverts and USB/Bluetooth.\n\n"
-                 f"The checksums are in `manifest.json`. [Device quick start]"
-                 f"(https://github.com/{repo}/blob/{commit}/README.md#quick-start)\n\n{MARKER}\n")
+        notes = release_notes(repo, version, upstream)
         with tempfile.TemporaryDirectory() as tmp:
             body = Path(tmp) / "notes.md"
             body.write_text(notes)

@@ -8,9 +8,15 @@ An independent MeshCore companion firmware for the **Heltec Mesh Node T1** with 
 
 1. Download the **`.uf2`** from the [latest T1 Pocket release](https://github.com/benaltair/t1-pocket/releases/latest). Let your phone receive queued messages and back up the node’s identity, contacts, channels and settings.
 2. Connect the T1 by USB and double-press the rear power button. On the mounted update drive, open `INFO_UF2.TXT`. Check for `Board-ID: mesh-node-t1` and `SoftDevice: S140 6.1.1`.
-3. Copy the UF2 onto that drive and let the node restart. Reconnect in MeshCore, sync the clock, and check your node name, contacts and channels. Home will appear after startup.
+3. Drag the downloaded `.uf2` onto that drive in Finder or File Explorer. Leave the cable plugged in while it copies. The drive disappears as the T1 restarts. Reconnect in MeshCore, sync the clock, and check your node name, contacts and channels. Home will appear after startup.
 
 Each release also includes a Nordic application DFU ZIP and a SHA-256 manifest. For your own time zone, advert scope or display settings, see [Build from source](#build-from-source). [Heltec USB update instructions](https://github.com/HelTecAutomation/HeltecWiKi/blob/main/docs/devices/open-source-hardware/nrf52840-series/mesh-node-t1/Usage.md)
+
+## Roll back to stock
+
+Let the phone receive queued messages and keep a private backup. The [latest Pocket release](https://github.com/benaltair/t1-pocket/releases/latest) links to MeshCore’s stock T1 Bluetooth companion UF2 for that release when available. Connect USB, double-press the rear power button, and copy the stock UF2 to the same drive. Reconnect your phone over Bluetooth after restart.
+
+Alternatively, choose **Heltec Mesh Node T1 → Companion / Bluetooth** in the [official MeshCore flasher](https://flasher.meshcore.io/). Leave **Erase device** unchecked. The stock Bluetooth role connects to your phone over Bluetooth.
 
 ## Screen preview
 
